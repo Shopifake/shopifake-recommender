@@ -1,0 +1,45 @@
+name: Check CD
+
+on:
+  workflow_call:
+    inputs:
+      cd-branches:
+        description: 'Branches to run CD/Docker on (JSON array)'
+        required: false
+        type: string
+        default: '[]'
+    outputs:
+      should-run-cd:
+        description: 'Whether CD should run'
+        value: ${{ jobs.check.outputs.should-run-cd }}
+
+jobs:
+  check:
+    name: Check if CD should run
+    runs-on: ubuntu-latest
+    outputs:
+      should-run-cd: ${{ steps.check.outputs.should-run-cd }}
+    steps:
+      - name: Check if branch is in CD branches
+        id: check
+        run: |
+          cd_branches='${{ inputs.cd-branches }}'
+          current_branch="${{ github.ref_name }}"
+          
+          # Default: run CD on main only
+          if [[ "$cd_branches" == "[]" ]] || [[ -z "$cd_branches" ]]; then
+            if [[ "$current_branch" == "main" ]]; then
+              echo "should-run-cd=true" >> $GITHUB_OUTPUT
+            else
+              echo "should-run-cd=false" >> $GITHUB_OUTPUT
+            fi
+            exit 0
+          fi
+          
+          # Parse JSON array to check if current branch is in the list
+          # Handle formats like: ["main"], ["main", "dev"], etc.
+          if echo "$cd_branches" | grep -o "\"$current_branch\"" > /dev/null 2>&1; then
+            echo "should-run-cd=true" >> $GITHUB_OUTPUT
+          else
+            echo "should-run-cd=false" >> $GITHUB_OUTPUT
+          fi

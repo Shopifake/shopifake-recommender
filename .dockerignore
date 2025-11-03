@@ -1,0 +1,48 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info
+.pytest_cache
+.coverage
+htmlcov
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Docs
+README.md
+*.md
+
+# CI/CD
+.github
+
+# Dev containers
+.devcontainer
+
+# Ruff
+.ruff_cache/
+
+# Black
+.black
+
+# MyPy
+.mypy_cache/
+
+

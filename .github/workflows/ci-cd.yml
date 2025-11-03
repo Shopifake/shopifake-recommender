@@ -1,0 +1,58 @@
+name: FastAPI Pipeline
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+  packages: write
+
+jobs:
+  check-cd:
+    name: Check CD
+    uses: ./.github/workflows/check-cd.yml
+    with:
+      cd-branches: '["main"]'
+
+  lint:
+    name: Lint
+    uses: ./.github/workflows/lint.yml
+    with:
+      python-version: '3.12'
+
+  test:
+    name: Test
+    needs: lint
+    uses: ./.github/workflows/test.yml
+    with:
+      python-version: '3.12'
+
+  build:
+    name: Build
+    needs: test
+    uses: ./.github/workflows/build.yml
+    with:
+      python-version: '3.12'
+
+  coverage:
+    name: Coverage
+    needs: test
+    uses: ./.github/workflows/coverage.yml
+    with:
+      python-version: '3.12'
+    secrets:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  docker:
+    name: Docker
+    if: ${{ needs.check-cd.outputs.should-run-cd == 'true' }}
+    needs: [check-cd, lint, test, build, coverage]
+    uses: ./.github/workflows/docker.yml
+    with:
+      python-version: '3.12'
+    secrets:
+      github-token: ${{ secrets.GITHUB_TOKEN }}

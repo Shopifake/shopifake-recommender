@@ -2,18 +2,13 @@
 FastAPI application entry point.
 """
 
-from typing import Annotated
-
-from fastapi import Depends, FastAPI
-from sqlalchemy import select, text
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import FastAPI
 
 from src.config import settings
-from src.database import get_db
 
 app = FastAPI(
-    title="FastAPI Template",
-    description="A production-ready FastAPI template",
+    title="Shopifake Recommender",
+    description="RAG-based product recommender service",
     version="1.0.0",
 )
 
@@ -30,25 +25,28 @@ async def read_root():
 
 
 @app.get("/health")
-async def health_check(db: Annotated[AsyncSession, Depends(get_db)]):
+async def health_check():
     """
-    Health check endpoint with database connectivity check.
-
-    Args:
-        db: Database session
+    Health check endpoint with Qdrant connectivity check.
 
     Returns:
         dict: Service health status
     """
+    import httpx
+
+    qdrant_url = settings.QDRANT_URL or "http://qdrant:6333"
+
     try:
-        # Check database connectivity
-        await db.execute(select(text("1")))
-        db_status = "connected"
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{qdrant_url}/collections", timeout=5.0)
+            qdrant_status = (
+                "connected" if response.status_code == 200 else "disconnected"
+            )
     except Exception:
-        db_status = "disconnected"
+        qdrant_status = "disconnected"
 
     return {
         "status": "healthy",
-        "database": db_status,
+        "qdrant": qdrant_status,
         "environment": settings.ENVIRONMENT,
     }

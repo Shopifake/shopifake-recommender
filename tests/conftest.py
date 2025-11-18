@@ -1,64 +1,28 @@
-"""
-Pytest configuration and fixtures.
-"""
+"""Pytest configuration and fixtures for the recommender service."""
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from src.database import Base, get_db
 from src.main import app
-
-# Test database URL (SQLite in memory for tests)
-TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
-
-# Create test engine
-test_engine = create_async_engine(
-    TEST_DATABASE_URL,
-    echo=False,
-)
-
-# Create test session factory
-TestSessionLocal = async_sessionmaker(
-    test_engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-)
+from src.services.product_registry import ProductRegistry, get_registry
 
 
-@pytest.fixture(scope="function")
-async def db_session():
-    """
-    Create a database session for testing.
-    """
-    # Create tables
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+@pytest.fixture()
+def registry() -> ProductRegistry:
+    """Provide a fresh in-memory registry and wire it into the app."""
 
-    # Create session
-    async with TestSessionLocal() as session:
-        yield session
-        await session.rollback()
-
-    # Drop tables
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+    instance = ProductRegistry()
+    app.dependency_overrides[get_registry] = lambda: instance
+    yield instance
+    app.dependency_overrides.clear()
 
 
-@pytest.fixture(scope="function")
-async def client(db_session: AsyncSession):
-    """
-    Create an async test client with database dependency override.
-    """
-
-    async def override_get_db():
-        yield db_session
-
-    app.dependency_overrides[get_db] = override_get_db
+@pytest.fixture()
+async def client(registry: ProductRegistry):
+    """Return an HTTPX async client pointing at the FastAPI app."""
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
     ) as test_client:
         yield test_client
-
-    app.dependency_overrides.clear()

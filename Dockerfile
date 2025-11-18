@@ -54,10 +54,8 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-# Copy application code (with alembic for migrations if needed)
+# Copy application code
 COPY --chown=fastapiuser:fastapiuser ./src ./src
-COPY --chown=fastapiuser:fastapiuser ./alembic ./alembic
-COPY --chown=fastapiuser:fastapiuser ./alembic.ini ./alembic.ini
 
 # Set permissions and switch to non-root user
 USER fastapiuser

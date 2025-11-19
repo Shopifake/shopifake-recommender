@@ -89,3 +89,6 @@ dmypy.json
 # Pyre type checker
 .pyre/
 run_pipeline.sh
+
+ui/
+docker-compose.yml

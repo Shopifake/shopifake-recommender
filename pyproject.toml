@@ -14,6 +14,7 @@ dependencies = [
     "pytest-cov==5.0.0",
     "ruff==0.8.3",
     "black==24.10.0",
+    "openai==1.51.0",
 ]
 
 [tool.black]

@@ -1,9 +1,13 @@
 """Pytest configuration and fixtures for the recommender service."""
 
+import asyncio
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from src.config import settings
 from src.main import app
+from src.services.decoder_client import get_decoder_client
 from src.services.product_registry import ProductRegistry, get_registry
 
 
@@ -14,7 +18,25 @@ def registry() -> ProductRegistry:
     instance = ProductRegistry()
     app.dependency_overrides[get_registry] = lambda: instance
     yield instance
-    app.dependency_overrides.clear()
+    app.dependency_overrides.pop(get_registry, None)
+
+
+@pytest.fixture(autouse=True)
+def decoder_stub():
+    """Provide a stub decoder so tests do not call external services."""
+
+    class _StubDecoder:
+        async def decode(self, prompt: str) -> str:
+            await asyncio.sleep(0)
+            return f"decoded::{prompt}"
+
+    stub = _StubDecoder()
+    original_key = settings.OPENAI_API_KEY
+    settings.OPENAI_API_KEY = original_key or "test-key"
+    app.dependency_overrides[get_decoder_client] = lambda: stub
+    yield stub
+    app.dependency_overrides.pop(get_decoder_client, None)
+    settings.OPENAI_API_KEY = original_key
 
 
 @pytest.fixture()

@@ -15,14 +15,15 @@ class Settings:
     """
 
     # Environment
-    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
+    ENVIRONMENT: str = os.getenv("ENVIRONMENT")
 
     # Qdrant settings
-    QDRANT_URL: str = os.getenv("QDRANT_URL", "http://qdrant:6333")
+    QDRANT_URL: str = os.getenv("QDRANT_URL")
 
     # Decoder / LLM settings
     OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY")
     OPENAI_MODEL: str = os.getenv("OPENAI_MODEL")
+    OPENAI_EMBEDDING_MODEL: str | None = os.getenv("OPENAI_EMBEDDING_MODEL")
 
     @property
     def is_production(self) -> bool:
@@ -36,6 +37,12 @@ class Settings:
         """Return True when a decoder client can be initialized."""
 
         return bool(self.OPENAI_API_KEY)
+
+    @property
+    def encoder_enabled(self) -> bool:
+        """Return True when an encoder client can be initialized."""
+
+        return bool(self.OPENAI_API_KEY and self.OPENAI_EMBEDDING_MODEL)
 
 
 settings = Settings()

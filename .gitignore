@@ -92,3 +92,4 @@ run_pipeline.sh
 
 ui/
 docker-compose.yml
+.todo

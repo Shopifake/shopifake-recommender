@@ -9,6 +9,8 @@ FastAPI microservice powering the future RAG-based recommendation engine for Sho
 - FastAPI 0.116.2 served through Gunicorn+Uvicorn workers
 - Qdrant health monitoring to validate the vector store dependency
 - Product registration endpoint with strict Pydantic schemas and an in-memory registry
+- Redis-backed embedding ingestion API that pushes jobs onto a worker queue
+- Streaming embedding worker that syncs vectors into Qdrant with optional deletes
 - Debug-only decoder and encoder routes to validate LLM + embedding credentials
 - End-to-end tests (pytest + httpx async fixtures)
 - Ruff + Black enforced via CI workflows
@@ -20,6 +22,7 @@ cp .env.example.dev .env
 # Fill in OPENAI_API_KEY plus the decoder (`OPENAI_MODEL`) and encoder (`OPENAI_EMBEDDING_MODEL`) names
 pip install -r requirements.txt
 uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+python -m src.services.embedding_worker  # runs the async embedding worker
 ```
 
 Or spin up the full stack (app + Qdrant):
@@ -28,11 +31,14 @@ Or spin up the full stack (app + Qdrant):
 docker compose up -d --build
 ```
 
+The compose file now starts FastAPI, Qdrant, Redis, the embedding worker, and the static UI container.
+
 API surface:
 
 - `GET /` – Basic heartbeat
 - `GET /health` – Reports app status + Qdrant connectivity
 - `POST /products/register` – Primary contract used by the catalog service
+- `POST /v1/embeddings` – Asynchronously enqueue embedding jobs (returns 202)
 - `POST /debug/decoder` – Fire a completion against the configured decoder (non-prod)
 - `POST /debug/encoder` – Generate embeddings against the configured encoder (non-prod)
 
@@ -79,6 +85,21 @@ src/
 
 `tests/` contains API-level tests that exercise the new registration flow.
 
+## 🧵 Embedding pipeline
+
+1. Catalog (or the debug UI) calls `POST /v1/embeddings` with a batch of `EmbeddingJob` payloads.
+2. The API pushes each job onto a Redis Stream (`embeddings:jobs`).
+3. One or more embedding workers (`python -m src.services.embedding_worker`) consume the stream, call the encoder client, and upsert/delete vectors inside Qdrant.
+4. Any failures are written to a dead-letter stream (`embeddings:dlq`) for later inspection.
+
+Key environment variables (see `.env.example.*`):
+
+- `REDIS_URL`, `EMBEDDINGS_STREAM_KEY`, `EMBEDDINGS_CONSUMER_GROUP`, `DLQ_STREAM_KEY`
+- `BATCH_MAX_MESSAGES`, `BATCH_MAX_WAIT_MS`, `WORKER_CONCURRENCY`
+- `QDRANT_URL`, `QDRANT_COLLECTION`
+
+The UI (`/ui`) now includes a form for posting embedding batches in addition to product registration and debug decoder/encoder tools.
+
 ## 🧭 Demo client
 
-A lightweight HTML/JS client lives under `../recommender-console/` (see repo root). Open `index.html` in a browser to trigger POST requests against the running service with pre-filled sample data.
+A lightweight HTML/JS client lives under `ui/`. Run `docker compose up` or `python -m http.server` inside `ui/` to exercise all routes, including the new embedding ingestion endpoint.

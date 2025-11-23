@@ -12,8 +12,9 @@ WORKDIR /app
 
 # Install system deps for building Python packages
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends gcc g++ libffi-dev && \
+    apt-get install -y --no-install-recommends g++ gcc libffi-dev && \
     rm -rf /var/lib/apt/lists/*
+
 
 # Install Python dependencies inside a virtual environment
 COPY requirements.txt .

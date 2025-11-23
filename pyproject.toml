@@ -14,6 +14,9 @@ dependencies = [
     "pytest-cov==5.0.0",
     "ruff==0.8.3",
     "black==24.10.0",
+    "openai==1.51.0",
+    "redis==5.0.8",
+    "qdrant-client==1.11.0",
 ]
 
 [tool.black]
@@ -37,12 +40,4 @@ ignore = []
 
 [tool.ruff.isort]
 known-first-party = ["src"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "function"
 

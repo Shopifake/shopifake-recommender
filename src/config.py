@@ -2,6 +2,7 @@
 Configuration settings for the application.
 """
 
+import logging
 import os
 
 from dotenv import load_dotenv
@@ -55,20 +56,25 @@ class Settings:
     @property
     def decoder_enabled(self) -> bool:
         """Return True when a decoder client can be initialized."""
-
         return bool(self.OPENAI_API_KEY)
 
     @property
     def encoder_enabled(self) -> bool:
         """Return True when an encoder client can be initialized."""
-
         return bool(self.OPENAI_API_KEY and self.OPENAI_EMBEDDING_MODEL)
 
     @property
     def auth_configured(self) -> bool:
         """Indicates whether JWT verification is configured."""
-
         return bool(self.JWT_JWKS_URL or self.JWT_ISSUER or self.JWT_AUDIENCE)
 
-
-settings = Settings()
+    def __init__(self):
+        self.env = os.getenv("ENV", "dev")
+        self.debug = os.getenv("DEBUG", "false").lower() == "true"
+        self.log_level = os.getenv("LOG_LEVEL", "INFO")
+        logging.basicConfig(level=self.log_level)
+        self.logger = logging.getLogger(__name__)
+        self.logger.debug(
+            f"Config initialized with env={self.env}, debug={self.debug}, "
+            f"log_level={self.log_level}"
+        )

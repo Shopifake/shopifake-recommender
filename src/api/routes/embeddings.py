@@ -55,18 +55,18 @@ async def enqueue_embeddings(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid embedding job format: {exc}",
-            )
+            ) from exc
 
     # Enqueue the jobs
     try:
         queued = await queue.enqueue(jobs)
         return {"queued": queued}
-    except Exception:
+    except Exception as exc:
         logger.exception("Failed to enqueue embedding jobs")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Embedding queue unavailable",
-        )
+        ) from exc
 
 
 @router.get(
@@ -84,7 +84,7 @@ async def list_stream_entries(count: int = Query(100, ge=1, le=1000)) -> list[di
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
-        )
+        ) from exc
 
     results: list[dict] = []
     for entry_id, fields in entries:
@@ -118,7 +118,7 @@ async def view_pending(count: int = Query(100, ge=1, le=1000)) -> dict:
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
-        )
+        ) from exc
 
     return {"pending": pending, "summary": summary}
 
@@ -136,7 +136,7 @@ async def read_dlq(count: int = Query(100, ge=1, le=1000)) -> list[dict]:
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
-        )
+        ) from exc
 
     results: list[dict] = []
     for entry_id, fields in entries:
@@ -170,7 +170,7 @@ async def list_embeddings(limit: int = Query(100, ge=1, le=1000)) -> list[dict]:
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
-        )
+        ) from exc
 
     results: list[dict] = []
     points, _ = response
@@ -304,7 +304,7 @@ def _coerce_pending_row(row: Any) -> dict[str, Any] | None:
                 "deliveries": row["deliveries"],
             }
 
-    if isinstance(row, (list, tuple)) and len(row) >= 4:
+    if isinstance(row, list | tuple) and len(row) >= 4:
         msg_id, consumer, idle, deliveries = row[:4]
         return {
             "id": msg_id,
@@ -357,7 +357,7 @@ def _coerce_consumer_row(row: Any) -> dict[str, Any] | None:
         if name is not None or pending is not None:
             return {"name": name, "pending": pending}
 
-    if isinstance(row, (list, tuple)) and len(row) >= 2:
+    if isinstance(row, list | tuple) and len(row) >= 2:
         return {"name": row[0], "pending": row[1]}
 
     return None

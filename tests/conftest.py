@@ -3,19 +3,27 @@
 import asyncio
 
 import pytest
+import pytest_asyncio
 import redis.asyncio as redis
 from httpx import ASGITransport, AsyncClient
 
 from src.config import settings
-from src.main import app
 from src.services.clients.decoder_client import get_decoder_client
 from src.services.clients.encoder_client import get_encoder_client
 from src.services.queue.embedding_queue import get_redis_client
 
 
+def pytest_configure(config):
+    """Register custom markers."""
+    config.addinivalue_line("markers", "integration: marks tests as integration tests")
+    config.addinivalue_line("markers", "unit: marks tests as unit tests")
+    config.addinivalue_line("markers", "asyncio: marks tests as async tests")
+
+
 @pytest.fixture(autouse=True)
 def decoder_stub():
     """Provide a stub decoder so tests do not call external services."""
+    from src.main import app
 
     class _StubDecoder:
         async def decode(self, prompt: str) -> str:
@@ -34,6 +42,7 @@ def decoder_stub():
 @pytest.fixture(autouse=True)
 def encoder_stub():
     """Provide a stub encoder for tests to avoid API calls."""
+    from src.main import app
 
     class _StubEncoder:
         async def embed(self, text: str) -> list[float]:
@@ -52,6 +61,8 @@ def encoder_stub():
 @pytest.fixture()
 def redis_client():
     """Provide a fresh Redis client for each test."""
+    from src.main import app
+
     client = redis.from_url(
         settings.REDIS_URL,
         encoding="utf-8",
@@ -63,9 +74,10 @@ def redis_client():
     app.dependency_overrides.pop(get_redis_client, None)
 
 
-@pytest.fixture()
+@pytest_asyncio.fixture()
 async def client(redis_client):
     """Return an HTTPX async client pointing at the FastAPI app."""
+    from src.main import app
 
     async with AsyncClient(
         transport=ASGITransport(app=app),

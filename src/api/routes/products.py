@@ -53,11 +53,12 @@ async def register_product(
         logger.info("Enqueued embedding job for product %s", payload.product_id)
     except Exception as exc:
         logger.warning(
-            "Failed to enqueue embedding job for product %s, but registration continues: %s",
+            "Failed to enqueue embedding job for product %s, "
+            "but registration continues: %s",
             payload.product_id,
             exc,
         )
-        # Don't fail registration if embedding enqueue fails - product can still be registered
+        # Don't fail registration if embedding enqueue fails
 
     logger.info(
         "[product-registration]",

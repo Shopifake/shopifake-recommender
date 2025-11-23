@@ -5,6 +5,7 @@ import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+import pytest_asyncio
 
 from src.main import app
 from src.services.queue.dlq_manager import DLQManager
@@ -46,7 +47,7 @@ class _MockRedis:
         self.stream_data = {}
         self.consumer_groups = {}
 
-    async def xadd(self, stream=None, fields=None, name=None, **kwargs):
+    def xadd(self, stream=None, fields=None, name=None, **kwargs):
         # Handle both positional and keyword arguments
         stream_name = stream or name
         if stream_name not in self.stream_data:
@@ -60,68 +61,64 @@ class _MockRedis:
 
     async def xreadgroup(self, groupname, consumername, streams, count=1, block=None):
         stream_key = list(streams.keys())[0]
-        if stream_key not in self.consumer_groups:
-            self.consumer_groups[stream_key] = {}
-        if groupname not in self.consumer_groups[stream_key]:
-            self.consumer_groups[stream_key][groupname] = {
-                "consumers": {},
-                "pending": [],
-            }
-
-        # Return pending messages for the consumer
+        self.consumer_groups.setdefault(stream_key, {})
+        self.consumer_groups[stream_key].setdefault(
+            groupname,
+            {"consumers": {}, "pending": []}
+        )
         group_data = self.consumer_groups[stream_key][groupname]
-        if consumername not in group_data["consumers"]:
-            group_data["consumers"][consumername] = {"pending": []}
-
+        group_data["consumers"].setdefault(consumername, {"pending": []})
         consumer_data = group_data["consumers"][consumername]
+
         if consumer_data["pending"]:
             entries = consumer_data["pending"][:count]
             consumer_data["pending"] = consumer_data["pending"][count:]
             return [(stream_key, entries)]
 
-        # If no pending, return new messages starting from ">"
-        if stream_key in self.stream_data:
-            new_entries = []
-            for entry_id, fields in self.stream_data[stream_key]:
-                # Simple check if this is a new message
-                is_new = not any(
-                    entry_id in str(pending) for pending in group_data["pending"]
-                )
-                if is_new:
-                    new_entries.append((entry_id, fields))
-                    # Add to consumer's pending
-                    consumer_data["pending"].append((entry_id, fields))
-                    if len(new_entries) >= count:
-                        break
-            if new_entries:
-                return [(stream_key, new_entries)]
+        def is_new_entry(entry_id):
+            return not any(
+                entry_id in str(pending)
+                for pending in group_data["pending"]
+            )
 
-        # Block simulation - return empty if block is set
+        if stream_key in self.stream_data:
+            new_entries = [
+                (entry_id, fields)
+                for entry_id, fields in self.stream_data[stream_key]
+                if is_new_entry(entry_id)
+            ]
+            for entry in new_entries[:count]:
+                consumer_data["pending"].append(entry)
+            if new_entries:
+                return [(stream_key, new_entries[:count])]
+
         if block:
-            await asyncio.sleep(0.01)  # Short sleep to simulate blocking
+            await asyncio.sleep(0.01)
         return []
 
-    async def xgroup_create(self, name, groupname, id="0", mkstream=True):
+    def xgroup_create(self, name, groupname, id="0", mkstream=True):
         if name not in self.consumer_groups:
             self.consumer_groups[name] = {}
         if groupname not in self.consumer_groups[name]:
             self.consumer_groups[name][groupname] = {"consumers": {}, "pending": []}
         return "OK"
 
-    async def ping(self):
+    def ping(self):
         return True
 
     async def close(self):
+        # Method intentionally left empty: mock resource cleanup not needed
         pass
 
     async def aclose(self):
+        # Method intentionally left empty: mock resource cleanup not needed
         pass
 
-    async def xack(self, stream, group, *message_ids):
+    def xack(self, stream, group, *message_ids):
         # Mock acknowledgment - just return OK
         return "OK"
 
-    async def xdel(self, stream, *message_ids):
+    def xdel(self, stream, *message_ids):
         # Mock deletion - just return the count
         return len(message_ids)
 
@@ -193,7 +190,7 @@ def mock_encoder():
     return mock
 
 
-@pytest.fixture()
+@pytest_asyncio.fixture()
 async def queue_override(mock_redis):
     """Override the embedding queue with mock Redis."""
     app.dependency_overrides[get_redis_client] = lambda: mock_redis
@@ -368,11 +365,11 @@ async def test_worker_handles_encoder_failure(mock_redis, mock_qdrant):
 
 
 @pytest.mark.asyncio
-async def test_worker_handles_qdrant_failure(mock_redis, mock_encoder):
+async def test_worker_handles_qdrant_failure(mock_redis):
     """Test that worker handles Qdrant storage failures."""
     # Mock encoder that succeeds
-    mock_encoder = MagicMock()
-    mock_encoder.embed = AsyncMock(return_value=[0.1, 0.2, 0.3])
+    encoder = MagicMock()
+    encoder.embed = AsyncMock(return_value=[0.1, 0.2, 0.3])
 
     # Create mock services with failing Qdrant
     mock_redis_service, mock_qdrant_service, mock_dlq_manager = (

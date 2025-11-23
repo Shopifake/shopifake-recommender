@@ -89,6 +89,39 @@ src/
 
 `tests/` contains API-level tests that exercise the registration and embedding flows.
 
+## 🧪 Testing
+
+### Unit Tests
+Run fast unit tests with mocked dependencies:
+```bash
+pytest tests/ -m "not integration"
+```
+
+### Integration Tests
+Run comprehensive integration tests with real Redis and Qdrant:
+```bash
+# Requires Docker
+./run_integration_tests.sh
+```
+
+Or run manually:
+```bash
+# Start test services
+docker-compose -f docker-compose.test.yml up -d
+
+# Wait for services, then run tests
+pytest tests/test_integration.py -v
+
+# Cleanup
+docker-compose -f docker-compose.test.yml down -v
+```
+
+Integration tests verify:
+- Real Redis stream operations
+- Real Qdrant vector storage
+- End-to-end embedding pipeline
+- Error handling with actual services
+
 ## 🧵 Embedding pipeline
 
 1. Catalog (or the debug UI) calls `POST /v1/embeddings` with a batch of `EmbeddingJob` payloads.

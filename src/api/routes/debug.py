@@ -8,8 +8,8 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
 from src.config import settings
-from src.services.decoder_client import DecoderDependency
-from src.services.encoder_client import EncoderDependency
+from src.services.clients.decoder_client import DecoderDependency
+from src.services.clients.encoder_client import EncoderDependency
 
 router = APIRouter(prefix="/debug", tags=["debug"])
 logger = logging.getLogger(__name__)

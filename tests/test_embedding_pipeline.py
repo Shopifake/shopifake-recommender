@@ -7,8 +7,36 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from src.main import app
-from src.services.embedding_queue import get_embedding_queue, get_redis_client
-from src.services.embedding_worker import EmbeddingWorker
+from src.services.queue.dlq_manager import DLQManager
+from src.services.queue.embedding_queue import get_embedding_queue, get_redis_client
+from src.services.queue.redis_stream import RedisStreamService
+from src.services.storage.qdrant_service import QdrantService
+from src.services.workers.embedding_worker import EmbeddingWorker
+
+
+def create_mock_worker_services(mock_encoder):
+    """Create mock services for testing the embedding worker."""
+    # Mock Redis service
+    mock_redis_service = MagicMock(spec=RedisStreamService)
+    mock_redis_service.ensure_consumer_group = AsyncMock()
+    mock_redis_service.read_batch = AsyncMock(return_value=[])
+    mock_redis_service.acknowledge_messages = AsyncMock()
+    mock_redis_service.delete_messages = AsyncMock()
+    mock_redis_service.stream_key = "embeddings:jobs"
+    mock_redis_service.group_name = "workers"
+    mock_redis_service.consumer_name = "test-consumer"
+
+    # Mock Qdrant service
+    mock_qdrant_service = MagicMock(spec=QdrantService)
+    mock_qdrant_service.ensure_collection = AsyncMock()
+    mock_qdrant_service.upsert_point = AsyncMock()
+    mock_qdrant_service.delete_point = AsyncMock()
+
+    # Mock DLQ manager
+    mock_dlq_manager = MagicMock(spec=DLQManager)
+    mock_dlq_manager.send_to_dlq = AsyncMock()
+
+    return mock_redis_service, mock_qdrant_service, mock_dlq_manager
 
 
 class _MockRedis:
@@ -202,8 +230,9 @@ async def test_product_registration_enqueues_embedding(client, queue_override):
     try:
         response = await client.post("/products/register", json=payload)
 
-        assert response.status_code == 201
+        assert response.status_code == 202
         data = response.json()
+        assert data["status"] == "accepted"
         assert data["product_id"] == payload["product_id"]
 
         # Verify embedding job was enqueued
@@ -244,8 +273,9 @@ async def test_product_registration_handles_enqueue_failure(client):
         response = await client.post("/products/register", json=payload)
 
         # Registration should still succeed despite enqueue failure
-        assert response.status_code == 201
+        assert response.status_code == 202
         data = response.json()
+        assert data["status"] == "accepted"
         assert data["product_id"] == payload["product_id"]
 
         # Verify enqueue was attempted
@@ -257,42 +287,42 @@ async def test_product_registration_handles_enqueue_failure(client):
 @pytest.mark.asyncio
 async def test_worker_processes_embedding_job(mock_redis, mock_qdrant, mock_encoder):
     """Test that the embedding worker processes jobs and stores in Qdrant."""
-    # Create a worker
-    worker = EmbeddingWorker(
-        redis_client=mock_redis,
-        encoder=mock_encoder,
-        qdrant_client=mock_qdrant,
+    # Create mock services
+    mock_redis_service, mock_qdrant_service, mock_dlq_manager = (
+        create_mock_worker_services(mock_encoder)
     )
 
-    # Manually add a job to the Redis stream
-    job_data = {
-        "product_id": "prod-worker-test",
-        "shop_id": "site-worker",
-        "embed_text": "Test product for worker",
-        "metadata": {"price": 49.99},
-    }
-    payload = json.dumps(job_data)
-    await mock_redis.xadd("embeddings:jobs", {"payload": payload})
+    # Create a worker with mock services
+    worker = EmbeddingWorker(
+        redis_service=mock_redis_service,
+        qdrant_service=mock_qdrant_service,
+        dlq_manager=mock_dlq_manager,
+        encoder=mock_encoder,
+    )
 
-    # Process one batch
-    entries = await worker._read_batch()
-    assert len(entries) == 1
+    # Create a proper EmbeddingJob
+    from src.models.embedding import EmbeddingJob
+
+    job = EmbeddingJob(
+        product_id="prod-worker-test",
+        shop_id="site-worker",
+        embed_text="Test product for worker",
+        metadata={"price": 49.99},
+    )
+
+    # Mock the read_batch to return the job
+    entries = [("embeddings:jobs", [("123-0", {"payload": job.model_dump_json()})])]
+    mock_redis_service.read_batch.return_value = entries
 
     # Process the entries
     await worker._process_entries(entries)
 
-    # Verify the embedding was stored in Qdrant
-    assert "products_embeddings" in mock_qdrant.points
-    points = mock_qdrant.points["products_embeddings"]
-    assert len(points) == 1
-
-    # Check the stored point
-    point_id = list(points.keys())[0]
-    point_data = points[point_id]
-    assert point_data["payload"]["product_id"] == "prod-worker-test"
-    assert point_data["payload"]["shop_id"] == "site-worker"
-    assert abs(point_data["payload"]["metadata"]["price"] - 49.99) < 0.01
-    assert len(point_data["vector"]) == 765  # 5 * 153 dimensions
+    # Verify the services were called correctly
+    mock_encoder.embed.assert_called_once_with("Test product for worker")
+    mock_qdrant_service.ensure_collection.assert_called_once()
+    mock_qdrant_service.upsert_point.assert_called_once()
+    mock_redis_service.acknowledge_messages.assert_called_once_with(["123-0"])
+    mock_redis_service.delete_messages.assert_called_once_with(["123-0"])
 
 
 @pytest.mark.asyncio
@@ -300,118 +330,157 @@ async def test_worker_handles_encoder_failure(mock_redis, mock_qdrant):
     """Test that worker handles encoder failures gracefully."""
     # Mock encoder that fails
     mock_encoder = MagicMock()
-    mock_encoder.encode_text = AsyncMock(side_effect=Exception("OpenAI API error"))
+    mock_encoder.embed = AsyncMock(side_effect=Exception("OpenAI API error"))
 
-    worker = EmbeddingWorker(
-        redis_client=mock_redis,
-        encoder=mock_encoder,
-        qdrant_client=mock_qdrant,
+    # Create mock services
+    mock_redis_service, mock_qdrant_service, mock_dlq_manager = (
+        create_mock_worker_services(mock_encoder)
     )
 
-    # Add a job
-    job_data = {
-        "product_id": "prod-fail-test",
-        "shop_id": "site-fail",
-        "embed_text": "This will fail",
-        "metadata": {},
-    }
-    payload = json.dumps(job_data)
-    await mock_redis.xadd("embeddings:jobs", {"payload": payload})
+    worker = EmbeddingWorker(
+        redis_service=mock_redis_service,
+        qdrant_service=mock_qdrant_service,
+        dlq_manager=mock_dlq_manager,
+        encoder=mock_encoder,
+    )
 
-    # Process the job
-    entries = await worker._read_batch()
+    # Create a job that will fail
+    from src.models.embedding import EmbeddingJob
+
+    job = EmbeddingJob(
+        product_id="prod-fail-test",
+        shop_id="site-fail",
+        embed_text="This will fail",
+        metadata={},
+    )
+
+    # Mock the read_batch to return the job
+    entries = [("embeddings:jobs", [("123-0", {"payload": job.model_dump_json()})])]
+    mock_redis_service.read_batch.return_value = entries
+
+    # Process the entries
     await worker._process_entries(entries)
 
-    # Verify job was sent to DLQ (simulated by checking it was processed but not stored)
-    # In a real scenario, we'd check the DLQ stream
-    # For this test, we just verify no point was stored due to failure
-    points = mock_qdrant.points.get("products_embeddings", {})
-    assert len(points) == 0  # No successful embeddings stored
+    # Verify DLQ was called due to encoder failure
+    mock_dlq_manager.send_to_dlq.assert_called_once()
+    # Verify no successful embedding was stored
+    mock_qdrant_service.upsert_point.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_worker_handles_qdrant_failure(mock_redis, mock_encoder):
     """Test that worker handles Qdrant storage failures."""
-    # Mock Qdrant that fails
-    mock_qdrant = MagicMock()
-    mock_qdrant.upsert = MagicMock(side_effect=Exception("Qdrant connection error"))
+    # Mock encoder that succeeds
+    mock_encoder = MagicMock()
+    mock_encoder.embed = AsyncMock(return_value=[0.1, 0.2, 0.3])
 
-    worker = EmbeddingWorker(
-        redis_client=mock_redis,
-        encoder=mock_encoder,
-        qdrant_client=mock_qdrant,
+    # Create mock services with failing Qdrant
+    mock_redis_service, mock_qdrant_service, mock_dlq_manager = (
+        create_mock_worker_services(mock_encoder)
+    )
+    mock_qdrant_service.upsert_point = AsyncMock(
+        side_effect=Exception("Qdrant connection error")
     )
 
-    # Add a job
-    job_data = {
-        "product_id": "prod-qdrant-fail",
-        "shop_id": "site-qdrant",
-        "embed_text": "Qdrant will fail",
-        "metadata": {},
-    }
-    payload = json.dumps(job_data)
-    await mock_redis.xadd("embeddings:jobs", {"payload": payload})
+    worker = EmbeddingWorker(
+        redis_service=mock_redis_service,
+        qdrant_service=mock_qdrant_service,
+        dlq_manager=mock_dlq_manager,
+        encoder=mock_encoder,
+    )
 
-    # Process the job
-    entries = await worker._read_batch()
+    # Create a job
+    from src.models.embedding import EmbeddingJob
+
+    job = EmbeddingJob(
+        product_id="prod-qdrant-fail",
+        shop_id="site-qdrant",
+        embed_text="Qdrant will fail",
+        metadata={},
+    )
+
+    # Mock the read_batch to return the job
+    entries = [("embeddings:jobs", [("123-0", {"payload": job.model_dump_json()})])]
+    mock_redis_service.read_batch.return_value = entries
+
+    # Process the entries
     await worker._process_entries(entries)
 
-    # Verify upsert was attempted but failed
-    mock_qdrant.upsert.assert_called_once()
+    # Verify Qdrant upsert was attempted but failed, and DLQ was called
+    mock_qdrant_service.upsert_point.assert_called_once()
+    mock_dlq_manager.send_to_dlq.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_worker_handles_malformed_json(mock_redis, mock_qdrant, mock_encoder):
     """Test that worker handles malformed JSON payloads gracefully."""
-    worker = EmbeddingWorker(
-        redis_client=mock_redis,
-        encoder=mock_encoder,
-        qdrant_client=mock_qdrant,
+    # Create mock services
+    mock_redis_service, mock_qdrant_service, mock_dlq_manager = (
+        create_mock_worker_services(mock_encoder)
     )
 
-    # Add malformed JSON
-    await mock_redis.xadd("embeddings:jobs", {"payload": "{invalid json"})
+    worker = EmbeddingWorker(
+        redis_service=mock_redis_service,
+        qdrant_service=mock_qdrant_service,
+        dlq_manager=mock_dlq_manager,
+        encoder=mock_encoder,
+    )
 
-    # Process the job
-    entries = await worker._read_batch()
+    # Mock malformed JSON entry
+    entries = [("embeddings:jobs", [("123-0", {"payload": "{invalid json"})])]
+    mock_redis_service.read_batch.return_value = entries
+
+    # Process the entries
     await worker._process_entries(entries)
 
-    # Verify job was sent to DLQ (check that DLQ stream has the entry)
-    dlq_entries = mock_redis.stream_data.get("embeddings:dlq", [])
-    assert len(dlq_entries) == 1
-    dlq_data = dlq_entries[0][1]
-    assert dlq_data["payload"] == "{invalid json"
-    assert "error" in dlq_data
+    # Verify DLQ was called for malformed JSON
+    mock_dlq_manager.send_to_dlq.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_worker_handles_missing_payload(mock_redis, mock_qdrant, mock_encoder):
     """Test that worker handles messages without payload field."""
+    # Create mock services
+    mock_redis_service, mock_qdrant_service, mock_dlq_manager = (
+        create_mock_worker_services(mock_encoder)
+    )
+
     worker = EmbeddingWorker(
-        redis_client=mock_redis,
+        redis_service=mock_redis_service,
+        qdrant_service=mock_qdrant_service,
+        dlq_manager=mock_dlq_manager,
         encoder=mock_encoder,
-        qdrant_client=mock_qdrant,
     )
 
     # Add message without payload
     await mock_redis.xadd("embeddings:jobs", {"other_field": "value"})
 
+    # Mock the read_batch to return the message without payload
+    entries = [("embeddings:jobs", [("123-0", {"other_field": "value"})])]
+    mock_redis_service.read_batch.return_value = entries
+
     # Process the job
-    entries = await worker._read_batch()
     await worker._process_entries(entries)
 
     # Verify no DLQ entries (message is just acked and ignored)
-    dlq_entries = mock_redis.stream_data.get("embeddings:dlq", [])
-    assert len(dlq_entries) == 0
+    mock_dlq_manager.send_to_dlq.assert_not_called()
+    mock_redis_service.acknowledge_messages.assert_called_once_with(["123-0"])
+    mock_redis_service.delete_messages.assert_called_once_with(["123-0"])
 
 
 @pytest.mark.asyncio
 async def test_worker_handles_empty_embed_text(mock_redis, mock_qdrant, mock_encoder):
     """Test that worker handles empty embed_text."""
+    # Create mock services
+    mock_redis_service, mock_qdrant_service, mock_dlq_manager = (
+        create_mock_worker_services(mock_encoder)
+    )
+
     worker = EmbeddingWorker(
-        redis_client=mock_redis,
+        redis_service=mock_redis_service,
+        qdrant_service=mock_qdrant_service,
+        dlq_manager=mock_dlq_manager,
         encoder=mock_encoder,
-        qdrant_client=mock_qdrant,
     )
 
     # Add job with empty embed_text - this should fail validation and go to DLQ
@@ -424,22 +493,32 @@ async def test_worker_handles_empty_embed_text(mock_redis, mock_qdrant, mock_enc
     payload = json.dumps(job_data)
     await mock_redis.xadd("embeddings:jobs", {"payload": payload})
 
+    # Mock the read_batch to return the job
+    entries = [("embeddings:jobs", [("123-0", {"payload": payload})])]
+    mock_redis_service.read_batch.return_value = entries
+
     # Process the job
-    entries = await worker._read_batch()
     await worker._process_entries(entries)
 
     # Verify job was sent to DLQ due to validation error
-    dlq_entries = mock_redis.stream_data.get("embeddings:dlq", [])
-    assert len(dlq_entries) == 1
+    mock_dlq_manager.send_to_dlq.assert_called_once()
+    mock_redis_service.acknowledge_messages.assert_called_once_with(["123-0"])
+    mock_redis_service.delete_messages.assert_called_once_with(["123-0"])
 
 
 @pytest.mark.asyncio
 async def test_worker_handles_delete_operation(mock_redis, mock_qdrant, mock_encoder):
     """Test that worker handles delete operations correctly."""
+    # Create mock services
+    mock_redis_service, mock_qdrant_service, mock_dlq_manager = (
+        create_mock_worker_services(mock_encoder)
+    )
+
     worker = EmbeddingWorker(
-        redis_client=mock_redis,
+        redis_service=mock_redis_service,
+        qdrant_service=mock_qdrant_service,
+        dlq_manager=mock_dlq_manager,
         encoder=mock_encoder,
-        qdrant_client=mock_qdrant,
     )
 
     # Add delete job
@@ -453,23 +532,33 @@ async def test_worker_handles_delete_operation(mock_redis, mock_qdrant, mock_enc
     payload = json.dumps(job_data)
     await mock_redis.xadd("embeddings:jobs", {"payload": payload})
 
+    # Mock the read_batch to return the job
+    entries = [("embeddings:jobs", [("123-0", {"payload": payload})])]
+    mock_redis_service.read_batch.return_value = entries
+
     # Process the job
-    entries = await worker._read_batch()
     await worker._process_entries(entries)
 
-    # Verify delete was called, not upsert
-    mock_qdrant.delete.assert_called_once()
-    mock_encoder.embed.assert_not_called()
-    mock_qdrant.upsert.assert_not_called()
+    # Verify delete was called on Qdrant
+    mock_qdrant_service.delete_point.assert_called_once()
+    mock_encoder.embed.assert_not_called()  # Should not embed for delete
+    mock_redis_service.acknowledge_messages.assert_called_once_with(["123-0"])
+    mock_redis_service.delete_messages.assert_called_once_with(["123-0"])
 
 
 @pytest.mark.asyncio
 async def test_worker_handles_invalid_job_data(mock_redis, mock_qdrant, mock_encoder):
     """Test that worker handles invalid EmbeddingJob data."""
+    # Create mock services
+    mock_redis_service, mock_qdrant_service, mock_dlq_manager = (
+        create_mock_worker_services(mock_encoder)
+    )
+
     worker = EmbeddingWorker(
-        redis_client=mock_redis,
+        redis_service=mock_redis_service,
+        qdrant_service=mock_qdrant_service,
+        dlq_manager=mock_dlq_manager,
         encoder=mock_encoder,
-        qdrant_client=mock_qdrant,
     )
 
     # Add job with missing required fields
@@ -481,13 +570,17 @@ async def test_worker_handles_invalid_job_data(mock_redis, mock_qdrant, mock_enc
     payload = json.dumps(job_data)
     await mock_redis.xadd("embeddings:jobs", {"payload": payload})
 
+    # Mock the read_batch to return the job
+    entries = [("embeddings:jobs", [("123-0", {"payload": payload})])]
+    mock_redis_service.read_batch.return_value = entries
+
     # Process the job
-    entries = await worker._read_batch()
     await worker._process_entries(entries)
 
     # Verify job was sent to DLQ due to validation error
-    dlq_entries = mock_redis.stream_data.get("embeddings:dlq", [])
-    assert len(dlq_entries) == 1
+    mock_dlq_manager.send_to_dlq.assert_called_once()
+    mock_redis_service.acknowledge_messages.assert_called_once_with(["123-0"])
+    mock_redis_service.delete_messages.assert_called_once_with(["123-0"])
 
 
 @pytest.mark.asyncio
@@ -497,23 +590,19 @@ async def test_worker_handles_dlq_failure(mock_redis, mock_qdrant):
     mock_encoder = MagicMock()
     mock_encoder.embed = AsyncMock(side_effect=Exception("Encoder error"))
 
-    # Mock Redis that fails on DLQ write
-    original_xadd = mock_redis.xadd
-    call_count = 0
+    # Create mock services
+    mock_redis_service, mock_qdrant_service, mock_dlq_manager = (
+        create_mock_worker_services(mock_encoder)
+    )
 
-    async def failing_xadd(*args, **kwargs):
-        nonlocal call_count
-        call_count += 1
-        if call_count == 2:  # Second call (DLQ) fails
-            raise RuntimeError("DLQ write failed")
-        return await original_xadd(*args, **kwargs)
-
-    mock_redis.xadd = failing_xadd
+    # Mock DLQ manager to fail
+    mock_dlq_manager.send_to_dlq = AsyncMock(side_effect=Exception("DLQ write failed"))
 
     worker = EmbeddingWorker(
-        redis_client=mock_redis,
+        redis_service=mock_redis_service,
+        qdrant_service=mock_qdrant_service,
+        dlq_manager=mock_dlq_manager,
         encoder=mock_encoder,
-        qdrant_client=mock_qdrant,
     )
 
     # Add a job
@@ -524,27 +613,40 @@ async def test_worker_handles_dlq_failure(mock_redis, mock_qdrant):
         "metadata": {},
     }
     payload = json.dumps(job_data)
-    await mock_redis.xadd("embeddings:jobs", {"payload": payload})
+
+    # Mock the read_batch to return the job
+    entries = [("embeddings:jobs", [("123-0", {"payload": payload})])]
+    mock_redis_service.read_batch.return_value = entries
 
     # Process the job - this should handle the DLQ failure gracefully
-    entries = await worker._read_batch()
     await worker._process_entries(entries)
 
     # Verify that processing completed despite DLQ failure
     # (The job failed but was still acked)
+    mock_dlq_manager.send_to_dlq.assert_called_once()
+    mock_redis_service.acknowledge_messages.assert_called_once_with(["123-0"])
+    mock_redis_service.delete_messages.assert_called_once_with(["123-0"])
 
 
 @pytest.mark.asyncio
 async def test_worker_handles_redis_ack_failure(mock_redis, mock_qdrant, mock_encoder):
     """Test that worker handles Redis ack failures gracefully."""
-    worker = EmbeddingWorker(
-        redis_client=mock_redis,
-        encoder=mock_encoder,
-        qdrant_client=mock_qdrant,
+    # Create mock services
+    mock_redis_service, mock_qdrant_service, mock_dlq_manager = (
+        create_mock_worker_services(mock_encoder)
     )
 
-    # Mock xack to fail
-    mock_redis.xack = AsyncMock(side_effect=Exception("Ack failed"))
+    # Mock acknowledge_messages to fail
+    mock_redis_service.acknowledge_messages = AsyncMock(
+        side_effect=Exception("Ack failed")
+    )
+
+    worker = EmbeddingWorker(
+        redis_service=mock_redis_service,
+        qdrant_service=mock_qdrant_service,
+        dlq_manager=mock_dlq_manager,
+        encoder=mock_encoder,
+    )
 
     # Add a job
     job_data = {
@@ -554,14 +656,21 @@ async def test_worker_handles_redis_ack_failure(mock_redis, mock_qdrant, mock_en
         "metadata": {},
     }
     payload = json.dumps(job_data)
-    await mock_redis.xadd("embeddings:jobs", {"payload": payload})
+
+    # Mock the read_batch to return the job
+    entries = [("embeddings:jobs", [("123-0", {"payload": payload})])]
+    mock_redis_service.read_batch.return_value = entries
 
     # Process the job - this should handle ack failure gracefully
-    entries = await worker._read_batch()
     await worker._process_entries(entries)
 
     # Verify job was still processed (stored in Qdrant) despite ack failure
-    assert "products_embeddings" in mock_qdrant.points
+    mock_encoder.embed.assert_called_once()
+    mock_qdrant_service.ensure_collection.assert_called_once()
+    mock_qdrant_service.upsert_point.assert_called_once()
+    mock_redis_service.acknowledge_messages.assert_called_once_with(["123-0"])
+    # delete_messages should not be called if ack fails
+    mock_redis_service.delete_messages.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -594,7 +703,7 @@ async def test_pipeline_end_to_end(client, mock_redis, mock_qdrant, mock_encoder
         }
 
         response = await client.post("/products/register", json=payload)
-        assert response.status_code == 201
+        assert response.status_code == 202
 
         # Step 2: Verify job was enqueued
         assert len(enqueue_calls) == 1
@@ -605,10 +714,16 @@ async def test_pipeline_end_to_end(client, mock_redis, mock_qdrant, mock_encoder
         assert job.embed_text == "End-to-End Lamp Complete pipeline test"
 
         # Step 3: Simulate worker processing
+        # Create mock services
+        mock_redis_service, mock_qdrant_service, mock_dlq_manager = (
+            create_mock_worker_services(mock_encoder)
+        )
+
         worker = EmbeddingWorker(
-            redis_client=mock_redis,
+            redis_service=mock_redis_service,
+            qdrant_service=mock_qdrant_service,
+            dlq_manager=mock_dlq_manager,
             encoder=mock_encoder,
-            qdrant_client=mock_qdrant,
         )
 
         # Manually add the job to Redis (simulating what the queue does)
@@ -620,20 +735,21 @@ async def test_pipeline_end_to_end(client, mock_redis, mock_qdrant, mock_encoder
         }
         await mock_redis.xadd("embeddings:jobs", {"payload": json.dumps(job_dict)})
 
+        # Mock the read_batch to return the job
+        entries = [("embeddings:jobs", [("123-0", {"payload": json.dumps(job_dict)})])]
+        mock_redis_service.read_batch.return_value = entries
+
         # Process the job
-        entries = await worker._read_batch()
-        assert len(entries) == 1
         await worker._process_entries(entries)
 
         # Step 4: Verify embedding was stored
-        assert "products_embeddings" in mock_qdrant.points
-        points = mock_qdrant.points["products_embeddings"]
-        assert len(points) == 1
-
-        stored_point = list(points.values())[0]
-        assert stored_point["payload"]["product_id"] == "prod-e2e-1"
-        assert abs(stored_point["payload"]["metadata"]["price"] - 79.99) < 0.01
-        assert len(stored_point["vector"]) == 765
+        mock_encoder.embed.assert_called_once_with(
+            "End-to-End Lamp Complete pipeline test"
+        )
+        mock_qdrant_service.ensure_collection.assert_called_once()
+        mock_qdrant_service.upsert_point.assert_called_once()
+        mock_redis_service.acknowledge_messages.assert_called_once_with(["123-0"])
+        mock_redis_service.delete_messages.assert_called_once_with(["123-0"])
 
     finally:
         app.dependency_overrides.pop(get_redis_client, None)

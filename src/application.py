@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from src.api.routes import include_api_routes
 from src.config import settings
-from src.services.embedding_queue import get_redis_client
+from src.services.queue.embedding_queue import get_redis_client
 
 _UI_DIRECTORY = Path(__file__).resolve().parent / "ui"
 

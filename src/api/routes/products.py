@@ -2,37 +2,32 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
 
 from src.models.embedding import EmbeddingJob
-from src.models.product import ProductPayload, RegisteredProduct
-from src.services.embedding_queue import EmbeddingQueue, get_embedding_queue
-from src.services.product_registry import ProductRegistry, get_registry
+from src.models.product import ProductPayload
+from src.services.queue.embedding_queue import EmbeddingQueue, get_embedding_queue
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/products", tags=["products"])
 
-RegistryDependency = Annotated[ProductRegistry, Depends(get_registry)]
 QueueDependency = Annotated[EmbeddingQueue, Depends(get_embedding_queue)]
 
 
 @router.post(
     "/register",
-    response_model=RegisteredProduct,
-    status_code=status.HTTP_201_CREATED,
+    status_code=status.HTTP_202_ACCEPTED,
     summary="Register or update a product inside the recommender",
 )
 async def register_product(
     payload: ProductPayload,
-    registry: RegistryDependency,
     queue: QueueDependency,
-) -> RegisteredProduct:
-    """Store the product payload in the registry and enqueue embedding job."""
+) -> dict[str, str]:
+    """Enqueue embedding job for the product."""
 
     logger.info(
         "Catalog registration received for product %s (site=%s)",
@@ -40,9 +35,6 @@ async def register_product(
         payload.site_id,
     )
     logger.debug("Received payload: %s", payload.model_dump_json())
-
-    # Register the product
-    registered = registry.register(payload)
 
     # Enqueue embedding job for the product
     embed_text = f"{payload.name} {payload.description}".strip()
@@ -60,19 +52,19 @@ async def register_product(
         await queue.enqueue([job])
         logger.info("Enqueued embedding job for product %s", payload.product_id)
     except Exception as exc:
-        logger.error(
-            "Failed to enqueue embedding job for product %s: %s",
+        logger.warning(
+            "Failed to enqueue embedding job for product %s, but registration continues: %s",
             payload.product_id,
             exc,
         )
-        # Don't fail the registration if embedding enqueue fails
-        # The product is still registered, embedding can be retried later
+        # Don't fail registration if embedding enqueue fails - product can still be registered
 
-    # TODO remove print and use logger
-    print(  # noqa: T201 - intentional for demo logging
+    logger.info(
         "[product-registration]",
-        json.dumps(registered.model_dump(mode="json")),
-        flush=True,
+        extra={
+            "product_id": payload.product_id,
+            "site_id": payload.site_id,
+        },
     )
 
-    return registered
+    return {"status": "accepted", "product_id": payload.product_id}

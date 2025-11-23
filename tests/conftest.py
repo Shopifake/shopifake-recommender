@@ -3,23 +3,14 @@
 import asyncio
 
 import pytest
+import redis.asyncio as redis
 from httpx import ASGITransport, AsyncClient
 
 from src.config import settings
 from src.main import app
-from src.services.decoder_client import get_decoder_client
-from src.services.encoder_client import get_encoder_client
-from src.services.product_registry import ProductRegistry, get_registry
-
-
-@pytest.fixture()
-def registry() -> ProductRegistry:
-    """Provide a fresh in-memory registry and wire it into the app."""
-
-    instance = ProductRegistry()
-    app.dependency_overrides[get_registry] = lambda: instance
-    yield instance
-    app.dependency_overrides.pop(get_registry, None)
+from src.services.clients.decoder_client import get_decoder_client
+from src.services.clients.encoder_client import get_encoder_client
+from src.services.queue.embedding_queue import get_redis_client
 
 
 @pytest.fixture(autouse=True)
@@ -59,7 +50,21 @@ def encoder_stub():
 
 
 @pytest.fixture()
-async def client(registry: ProductRegistry):
+def redis_client():
+    """Provide a fresh Redis client for each test."""
+    client = redis.from_url(
+        settings.REDIS_URL,
+        encoding="utf-8",
+        decode_responses=True,
+    )
+    # Override the global Redis client for this test
+    app.dependency_overrides[get_redis_client] = lambda: client
+    yield client
+    app.dependency_overrides.pop(get_redis_client, None)
+
+
+@pytest.fixture()
+async def client(redis_client):
     """Return an HTTPX async client pointing at the FastAPI app."""
 
     async with AsyncClient(

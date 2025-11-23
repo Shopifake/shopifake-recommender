@@ -6,7 +6,7 @@ import pytest
 
 from src.config import settings
 from src.main import app
-from src.services.decoder_client import get_decoder_client
+from src.services.clients.decoder_client import get_decoder_client
 
 
 @pytest.mark.asyncio

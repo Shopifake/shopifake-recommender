@@ -6,7 +6,7 @@ import pytest
 
 from src.config import settings
 from src.main import app
-from src.services.encoder_client import get_encoder_client
+from src.services.clients.encoder_client import get_encoder_client
 
 
 @pytest.mark.asyncio

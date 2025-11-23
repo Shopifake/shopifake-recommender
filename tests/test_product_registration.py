@@ -33,14 +33,14 @@ async def test_register_product(client):
 
     response = await client.post("/products/register", json=payload)
 
-    assert response.status_code == 201
+    assert response.status_code == 202
     data = response.json()
+    assert data["status"] == "accepted"
     assert data["product_id"] == payload["product_id"]
-    assert data["registered_at"]
 
 
 @pytest.mark.asyncio
-async def test_duplicate_registration_overwrites(client):
+async def test_duplicate_registration_allowed(client):
     payload = {
         "product_id": "prod-duplicate",
         "site_id": "site-abc",
@@ -55,9 +55,9 @@ async def test_duplicate_registration_overwrites(client):
     }
 
     first = await client.post("/products/register", json=payload)
-    second_payload = {**payload, "name": "Updated"}
-    second = await client.post("/products/register", json=second_payload)
+    second = await client.post("/products/register", json=payload)
 
-    assert first.status_code == 201
-    assert second.status_code == 201
-    assert second.json()["name"] == "Updated"
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert first.json()["product_id"] == payload["product_id"]
+    assert second.json()["product_id"] == payload["product_id"]

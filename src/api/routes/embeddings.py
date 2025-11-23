@@ -4,18 +4,69 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from qdrant_client import QdrantClient  # type: ignore[import]
 from redis.exceptions import ResponseError
 
 from src.config import settings
-from src.services.embedding_queue import get_redis_client
+from src.models.embedding import EmbeddingJob
+from src.services.queue.embedding_queue import (
+    EmbeddingQueue,
+    get_embedding_queue,
+    get_redis_client,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/embeddings", tags=["embeddings"])
+
+QueueDependency = Annotated[EmbeddingQueue, Depends(get_embedding_queue)]
+
+
+@router.post(
+    "",
+    summary="Enqueue embedding jobs for processing",
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def enqueue_embeddings(
+    payload: dict[str, Any], queue: QueueDependency
+) -> dict[str, int]:
+    """Enqueue embedding jobs for asynchronous processing.
+
+    Accepts a batch of embedding jobs to be processed by the embedding worker.
+    Each job should contain the necessary fields for embedding generation.
+    """
+    items = payload.get("items", [])
+    if not items:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Request must contain 'items' array with embedding jobs",
+        )
+
+    # Convert items to EmbeddingJob objects
+    jobs = []
+    for item in items:
+        try:
+            job = EmbeddingJob(**item)
+            jobs.append(job)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid embedding job format: {exc}",
+            )
+
+    # Enqueue the jobs
+    try:
+        queued = await queue.enqueue(jobs)
+        return {"queued": queued}
+    except Exception:
+        logger.exception("Failed to enqueue embedding jobs")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Embedding queue unavailable",
+        )
 
 
 @router.get(

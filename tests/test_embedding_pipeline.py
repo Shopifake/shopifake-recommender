@@ -63,8 +63,7 @@ class _MockRedis:
         stream_key = list(streams.keys())[0]
         self.consumer_groups.setdefault(stream_key, {})
         self.consumer_groups[stream_key].setdefault(
-            groupname,
-            {"consumers": {}, "pending": []}
+            groupname, {"consumers": {}, "pending": []}
         )
         group_data = self.consumer_groups[stream_key][groupname]
         group_data["consumers"].setdefault(consumername, {"pending": []})
@@ -77,8 +76,7 @@ class _MockRedis:
 
         def is_new_entry(entry_id):
             return not any(
-                entry_id in str(pending)
-                for pending in group_data["pending"]
+                entry_id in str(pending) for pending in group_data["pending"]
             )
 
         if stream_key in self.stream_data:

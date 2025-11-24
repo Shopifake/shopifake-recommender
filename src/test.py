@@ -9,12 +9,12 @@ list = [1, 2, 3]
 dict = {"a": 1, "b": 2}
 
 # --- 4. Unused variable (F841) ---
-for i in range(5):
+for _i in range(5):
     pass
 
 # --- 5. Unnecessary list index lookup (PLR1736) ---
 letters = ["a", "b", "c"]
-for i, letter in enumerate(letters):
+for _i, letter in enumerate(letters):
     print(letter)  # unnecessary list index lookup
 
 # --- 6. Non-idiomatic membership check (UP015 or PLR1714 style) ---
@@ -23,12 +23,12 @@ if "a" == letter:
 
 # --- 7. Unnecessary comparison to True (PLR0123) ---
 flag = True
-if flag == True:
+if flag:
     print("flag is true")
 
 # --- 8. Unnecessary lambda (PLR5501) ---
 nums = [1, 2, 3]
-mapped = map(lambda x: x + 1, nums)
+mapped = (x + 1 for x in nums)
 
 # --- 9. Bad import sorting (I001) ---
 
@@ -44,7 +44,8 @@ def append_item(value, container=None):
 
     Args:
         value: The value to append.
-        container: The list to which the value will be appended. If None, a new list is created.
+        container: The list to which the value will be appended.
+            If None, a new list is created.
 
     Returns:
         The container with the appended value.

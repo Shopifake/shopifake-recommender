@@ -161,7 +161,6 @@ async def test_full_embedding_pipeline_integration(
     qdrant_service = QdrantService(qdrant_integration, "products_embeddings")
     dlq_manager = DLQManager(redis_service)
 
-
     # Use a mock encoder that returns real embeddings
     class MockEncoder:
         async def embed(self, text: str) -> list[float]:

@@ -362,7 +362,6 @@ async def test_worker_handles_encoder_failure(mock_redis, mock_qdrant):
     mock_qdrant_service.upsert_point.assert_not_called()
 
 
-
 @pytest.mark.asyncio
 async def test_worker_handles_qdrant_failure(mock_redis):
     """Test that worker handles Qdrant storage failures."""

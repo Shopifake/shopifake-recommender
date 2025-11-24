@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
 from pydantic import AnyHttpUrl, BaseModel, Field
 
 
@@ -44,15 +42,3 @@ class ProductPayload(BaseModel):
     )
     filters: list[FilterPayload] = Field(default_factory=list)
     metadata: dict = Field(default_factory=dict)
-
-
-class RegisteredProduct(ProductPayload):
-    """Internal representation persisted inside the registry."""
-
-    registered_at: datetime = Field(
-        default_factory=datetime.utcnow,
-        description="Timestamp when the product was registered inside the recommender",
-    )
-
-    class Config:
-        json_encoders = {datetime: lambda dt: dt.isoformat()}

@@ -1,64 +1,86 @@
-"""
-Pytest configuration and fixtures.
-"""
+"""Pytest configuration and fixtures for the recommender service."""
+
+import asyncio
 
 import pytest
+import pytest_asyncio
+import redis.asyncio as redis
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from src.database import Base, get_db
-from src.main import app
-
-# Test database URL (SQLite in memory for tests)
-TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
-
-# Create test engine
-test_engine = create_async_engine(
-    TEST_DATABASE_URL,
-    echo=False,
-)
-
-# Create test session factory
-TestSessionLocal = async_sessionmaker(
-    test_engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-)
+from src.config import settings
+from src.services.clients.decoder_client import get_decoder_client
+from src.services.clients.encoder_client import get_encoder_client
+from src.services.queue.embedding_queue import get_redis_client
 
 
-@pytest.fixture(scope="function")
-async def db_session():
-    """
-    Create a database session for testing.
-    """
-    # Create tables
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-    # Create session
-    async with TestSessionLocal() as session:
-        yield session
-        await session.rollback()
-
-    # Drop tables
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+def pytest_configure(config):
+    """Register custom markers."""
+    config.addinivalue_line("markers", "integration: marks tests as integration tests")
+    config.addinivalue_line("markers", "unit: marks tests as unit tests")
+    config.addinivalue_line("markers", "asyncio: marks tests as async tests")
 
 
-@pytest.fixture(scope="function")
-async def client(db_session: AsyncSession):
-    """
-    Create an async test client with database dependency override.
-    """
+@pytest.fixture(autouse=True)
+def decoder_stub():
+    """Provide a stub decoder so tests do not call external services."""
+    from src.main import app
 
-    async def override_get_db():
-        yield db_session
+    class _StubDecoder:
+        async def decode(self, prompt: str) -> str:
+            await asyncio.sleep(0)
+            return f"decoded::{prompt}"
 
-    app.dependency_overrides[get_db] = override_get_db
+    stub = _StubDecoder()
+    original_key = settings.OPENAI_API_KEY
+    settings.OPENAI_API_KEY = original_key or "test-key"
+    app.dependency_overrides[get_decoder_client] = lambda: stub
+    yield stub
+    app.dependency_overrides.pop(get_decoder_client, None)
+    settings.OPENAI_API_KEY = original_key
+
+
+@pytest.fixture(autouse=True)
+def encoder_stub():
+    """Provide a stub encoder for tests to avoid API calls."""
+    from src.main import app
+
+    class _StubEncoder:
+        async def embed(self, text: str) -> list[float]:
+            await asyncio.sleep(0)
+            return [1.0, float(len(text))]
+
+    stub = _StubEncoder()
+    original_model = settings.OPENAI_EMBEDDING_MODEL
+    settings.OPENAI_EMBEDDING_MODEL = original_model or "test-embedding"
+    app.dependency_overrides[get_encoder_client] = lambda: stub
+    yield stub
+    app.dependency_overrides.pop(get_encoder_client, None)
+    settings.OPENAI_EMBEDDING_MODEL = original_model
+
+
+@pytest.fixture()
+def redis_client():
+    """Provide a fresh Redis client for each test."""
+    from src.main import app
+
+    client = redis.from_url(
+        settings.REDIS_URL,
+        encoding="utf-8",
+        decode_responses=True,
+    )
+    # Override the global Redis client for this test
+    app.dependency_overrides[get_redis_client] = lambda: client
+    yield client
+    app.dependency_overrides.pop(get_redis_client, None)
+
+
+@pytest_asyncio.fixture()
+async def client(redis_client):
+    """Return an HTTPX async client pointing at the FastAPI app."""
+    from src.main import app
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app),
+        base_url="http://testserver",
     ) as test_client:
         yield test_client
-
-    app.dependency_overrides.clear()

@@ -362,12 +362,13 @@ async def test_worker_handles_encoder_failure(mock_redis, mock_qdrant):
     mock_qdrant_service.upsert_point.assert_not_called()
 
 
+
 @pytest.mark.asyncio
 async def test_worker_handles_qdrant_failure(mock_redis):
     """Test that worker handles Qdrant storage failures."""
     # Mock encoder that succeeds
-    encoder = MagicMock()
-    encoder.embed = AsyncMock(return_value=[0.1, 0.2, 0.3])
+    mock_encoder = MagicMock()
+    mock_encoder.embed = AsyncMock(return_value=[0.1, 0.2, 0.3])
 
     # Create mock services with failing Qdrant
     mock_redis_service, mock_qdrant_service, mock_dlq_manager = (
@@ -447,6 +448,8 @@ async def test_worker_handles_missing_payload(mock_redis, mock_qdrant, mock_enco
         encoder=mock_encoder,
     )
 
+    # Patch xadd to be async
+    mock_redis.xadd = AsyncMock(return_value="123-0")
     # Add message without payload
     await mock_redis.xadd("embeddings:jobs", {"other_field": "value"})
 
@@ -486,6 +489,7 @@ async def test_worker_handles_empty_embed_text(mock_redis, mock_qdrant, mock_enc
         "metadata": {},
     }
     payload = json.dumps(job_data)
+    mock_redis.xadd = AsyncMock(return_value="123-0")
     await mock_redis.xadd("embeddings:jobs", {"payload": payload})
 
     # Mock the read_batch to return the job
@@ -525,6 +529,7 @@ async def test_worker_handles_delete_operation(mock_redis, mock_qdrant, mock_enc
         "metadata": {},
     }
     payload = json.dumps(job_data)
+    mock_redis.xadd = AsyncMock(return_value="123-0")
     await mock_redis.xadd("embeddings:jobs", {"payload": payload})
 
     # Mock the read_batch to return the job
@@ -563,6 +568,7 @@ async def test_worker_handles_invalid_job_data(mock_redis, mock_qdrant, mock_enc
         "metadata": {},
     }
     payload = json.dumps(job_data)
+    mock_redis.xadd = AsyncMock(return_value="123-0")
     await mock_redis.xadd("embeddings:jobs", {"payload": payload})
 
     # Mock the read_batch to return the job
@@ -728,6 +734,7 @@ async def test_pipeline_end_to_end(client, mock_redis, mock_qdrant, mock_encoder
             "embed_text": job.embed_text,
             "metadata": job.metadata,
         }
+        mock_redis.xadd = AsyncMock(return_value="123-0")
         await mock_redis.xadd("embeddings:jobs", {"payload": json.dumps(job_dict)})
 
         # Mock the read_batch to return the job

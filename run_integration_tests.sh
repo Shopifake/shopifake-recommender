@@ -12,7 +12,7 @@ docker-compose -f docker-compose.test.yml up -d
 echo "⏳ Waiting for Redis..."
 timeout=60
 while ! docker-compose -f docker-compose.test.yml exec -T redis redis-cli ping | grep -q PONG; do
-    if [ $timeout -le 0 ]; then
+    if [[ $timeout -le 0 ]]; then
         echo "❌ Redis failed to start"
         exit 1
     fi
@@ -23,7 +23,7 @@ done
 echo "⏳ Waiting for Qdrant..."
 timeout=120
 while ! curl -f http://localhost:6333/ > /dev/null 2>&1; do
-    if [ $timeout -le 0 ]; then
+    if [[ $timeout -le 0 ]]; then
         echo "❌ Qdrant failed to start"
         exit 1
     fi

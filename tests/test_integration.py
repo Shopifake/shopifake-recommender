@@ -163,7 +163,7 @@ async def test_full_embedding_pipeline_integration(
 
     # Use a mock encoder that returns real embeddings
     class MockEncoder:
-        async def embed(self, text: str) -> list[float]:
+        def embed(self, text: str) -> list[float]:
             # Return a simple embedding based on text length
             return [1.0, float(len(text)), 0.5]
 
@@ -307,7 +307,7 @@ async def test_worker_processing_with_real_services_integration(
 
     # Use a mock encoder that returns real embeddings
     class MockEncoder:
-        async def embed(self, text: str) -> list[float]:
+        def embed(self, text: str) -> list[float]:
             # Return a simple embedding based on text length
             return [1.0, float(len(text)), 0.5]
 

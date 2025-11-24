@@ -74,7 +74,12 @@ class Settings:
         self.log_level = os.getenv("LOG_LEVEL", "INFO")
         logging.basicConfig(level=self.log_level)
         self.logger = logging.getLogger(__name__)
+
         self.logger.debug(
             f"Config initialized with env={self.env}, debug={self.debug}, "
             f"log_level={self.log_level}"
         )
+
+
+# Create a global settings instance for import
+settings = Settings()

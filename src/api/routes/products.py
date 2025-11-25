@@ -19,6 +19,55 @@ QueueDependency = Annotated[EmbeddingQueue, Depends(get_embedding_queue)]
 
 
 @router.post(
+    "/register/batch",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Register or update multiple products inside the recommender",
+)
+async def register_products_batch(
+    payload: list[ProductPayload],
+    queue: QueueDependency,
+) -> dict:
+    """Enqueue embedding jobs for multiple products."""
+    jobs = []
+    for prod in payload:
+        # TODO add more complexity here to have better embeddings
+        embed_text = f"{prod.name} {prod.description}".strip()
+        if not embed_text:
+            embed_text = prod.name or "unnamed product"
+        jobs.append(
+            EmbeddingJob(
+                product_id=prod.product_id,
+                shop_id=prod.site_id,
+                embed_text=embed_text,
+                metadata={
+                    "name": prod.name,
+                    "description": prod.description,
+                    "price": getattr(prod, "price", None),
+                    "sku": prod.sku,
+                    "status": prod.status,
+                    "filters": [f.model_dump() for f in prod.filters],
+                    "categories": [c.model_dump() for c in prod.categories],
+                    "images": prod.images,
+                    "extra": prod.metadata,
+                },
+            )
+        )
+    try:
+        await queue.enqueue(jobs)
+        logger.info("Enqueued embedding jobs for %d products", len(jobs))
+    except Exception as exc:
+        logger.warning(
+            "Failed to enqueue embedding jobs for batch, but registration continues: %s",
+            exc,
+        )
+    return {
+        "status": "accepted",
+        "count": len(jobs),
+        "product_ids": [p.product_id for p in payload],
+    }
+
+
+@router.post(
     "/register",
     status_code=status.HTTP_202_ACCEPTED,
     summary="Register or update a product inside the recommender",

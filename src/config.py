@@ -78,3 +78,7 @@ class Settings:
             f"Config initialized with env={self.env}, debug={self.debug}, "
             f"log_level={self.log_level}"
         )
+
+
+# Instantiate settings at module level for import
+settings = Settings()

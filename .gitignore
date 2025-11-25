@@ -93,3 +93,5 @@ run_pipeline.sh
 ui/
 docker-compose.yml
 .todo
+.env.example.dev
+.env.example.dev

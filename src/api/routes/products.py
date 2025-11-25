@@ -45,7 +45,17 @@ async def register_product(
         product_id=payload.product_id,
         shop_id=payload.site_id,
         embed_text=embed_text,
-        metadata={"price": getattr(payload, "price", None)},
+        metadata={
+            "name": payload.name,
+            "description": payload.description,
+            "price": getattr(payload, "price", None),
+            "sku": payload.sku,
+            "status": payload.status,
+            "filters": [f.model_dump() for f in payload.filters],
+            "categories": [c.model_dump() for c in payload.categories],
+            "images": payload.images,
+            "extra": payload.metadata,
+        },
     )
 
     try:

@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI
 
-from src.api.routes import debug, embeddings, products, system
+from src.api.routes import debug, embeddings, products, rag, system
 
 
 def include_api_routes(app: FastAPI) -> None:
@@ -12,3 +12,4 @@ def include_api_routes(app: FastAPI) -> None:
     app.include_router(products.router)
     app.include_router(debug.router)
     app.include_router(embeddings.router)
+    app.include_router(rag.router)

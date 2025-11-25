@@ -28,6 +28,27 @@ class Settings:
     BATCH_MAX_WAIT_MS: int = int(os.getenv("BATCH_MAX_WAIT_MS", "200"))
     WORKER_CONCURRENCY: int = int(os.getenv("WORKER_CONCURRENCY", "4"))
 
+    # RAG query processing
+    RAG_QUERY_STREAM_KEY: str = os.getenv("RAG_QUERY_STREAM_KEY", "rag:queries")
+    RAG_QUERY_CONSUMER_GROUP: str = os.getenv(
+        "RAG_QUERY_CONSUMER_GROUP",
+        "rag-workers",
+    )
+    RAG_RESULT_KEY_PREFIX: str = os.getenv("RAG_RESULT_KEY_PREFIX", "rag:results:")
+    RAG_RESULT_TTL_SECONDS: int = int(os.getenv("RAG_RESULT_TTL_SECONDS", "900"))
+    RAG_DEFAULT_TOP_K: int = int(os.getenv("RAG_DEFAULT_TOP_K", "5"))
+    RAG_MAX_TOP_K: int = int(os.getenv("RAG_MAX_TOP_K", "20"))
+
+    # Chat orchestration settings
+    CHAT_REQUEST_STREAM_KEY: str = os.getenv("CHAT_REQUEST_STREAM_KEY", "chat:requests")
+    CHAT_REQUEST_CONSUMER_GROUP: str = os.getenv(
+        "CHAT_REQUEST_CONSUMER_GROUP",
+        "chat-workers",
+    )
+    CHAT_RESULT_KEY_PREFIX: str = os.getenv("CHAT_RESULT_KEY_PREFIX", "chat:results:")
+    CHAT_RESULT_TTL_SECONDS: int = int(os.getenv("CHAT_RESULT_TTL_SECONDS", "900"))
+    CHAT_DEFAULT_TOP_K: int = int(os.getenv("CHAT_DEFAULT_TOP_K", "5"))
+
     # Qdrant settings
     QDRANT_URL: str = os.getenv("QDRANT_URL", "http://localhost:6333")
     QDRANT_COLLECTION: str = os.getenv(

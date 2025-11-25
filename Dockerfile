@@ -45,7 +45,8 @@ ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONOPTIMIZE=1 \
     ENVIRONMENT=production \
-    POSTGRES_PORT=5432
+    POSTGRES_PORT=5432 \
+    PYTHONPATH="/app"
 
 # Install curl for healthcheck
 RUN apt-get update && \

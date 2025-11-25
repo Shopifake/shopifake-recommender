@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 import pytest_asyncio
-import redis.asyncio as redis
+from fakeredis import aioredis as fakeredis
 from httpx import ASGITransport, AsyncClient
 
 from src.config import settings
@@ -58,20 +58,25 @@ def encoder_stub():
     settings.OPENAI_EMBEDDING_MODEL = original_model
 
 
-@pytest.fixture()
-def redis_client():
-    """Provide a fresh Redis client for each test."""
+@pytest_asyncio.fixture()
+async def redis_client():
+    """Provide a fake Redis client for each test."""
+    from src.api.routes import chat as chat_routes
     from src.main import app
+    from src.services.chat.result_store import ChatResultStore
 
-    client = redis.from_url(
-        settings.REDIS_URL,
-        encoding="utf-8",
-        decode_responses=True,
-    )
-    # Override the global Redis client for this test
+    client = fakeredis.FakeRedis()
     app.dependency_overrides[get_redis_client] = lambda: client
-    yield client
-    app.dependency_overrides.pop(get_redis_client, None)
+    app.dependency_overrides[chat_routes._get_result_store] = (  # type: ignore[attr-defined]
+        lambda: ChatResultStore(client)
+    )
+    try:
+        yield client
+    finally:
+        await client.flushdb()
+        await client.aclose()
+        app.dependency_overrides.pop(get_redis_client, None)
+        app.dependency_overrides.pop(chat_routes._get_result_store, None)  # type: ignore[attr-defined]
 
 
 @pytest_asyncio.fixture()

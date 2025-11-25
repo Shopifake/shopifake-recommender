@@ -94,3 +94,4 @@ ui/
 .todo
 .env.example.dev
 .env.example.dev
+scripts/

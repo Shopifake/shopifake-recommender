@@ -23,10 +23,7 @@ class QdrantService:
         self._collection_ready = False
 
     async def ensure_collection(self, vector_size: int) -> None:
-        """Ensure the collection exists with the correct configuration."""
-        if self._collection_ready:
-            return
-
+        """Ensure the collection exists with the correct configuration. Always checks Qdrant."""
         try:
             await asyncio.to_thread(
                 self.client.get_collection,
@@ -46,6 +43,35 @@ class QdrantService:
             ),
         )
         self._collection_ready = True
+
+    async def upsert_point(
+        self, point_id: str, vector: list[float], payload: dict[str, Any]
+    ) -> None:
+        """Upsert a point into the collection, recreating collection if missing."""
+        point = qmodels.PointStruct(
+            id=point_id,
+            vector=vector,
+            payload=payload,
+        )
+        try:
+            await asyncio.to_thread(
+                self.client.upsert,
+                collection_name=self.collection_name,
+                points=[point],
+            )
+        except Exception as exc:
+            # If collection is missing, recreate and retry once
+            if "doesn't exist" in str(exc) or "Not found" in str(exc):
+                logger.warning("Qdrant collection missing, recreating: %s", self.collection_name)
+                self._collection_ready = False
+                await self.ensure_collection(len(vector))
+                await asyncio.to_thread(
+                    self.client.upsert,
+                    collection_name=self.collection_name,
+                    points=[point],
+                )
+            else:
+                raise
 
     async def upsert_point(
         self, point_id: str, vector: list[float], payload: dict[str, Any]

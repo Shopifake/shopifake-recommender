@@ -62,7 +62,9 @@ class QdrantService:
         except Exception as exc:
             # If collection is missing, recreate and retry once
             if "doesn't exist" in str(exc) or "Not found" in str(exc):
-                logger.warning("Qdrant collection missing, recreating: %s", self.collection_name)
+                logger.warning(
+                    "Qdrant collection missing, recreating: %s", self.collection_name
+                )
                 self._collection_ready = False
                 await self.ensure_collection(len(vector))
                 await asyncio.to_thread(

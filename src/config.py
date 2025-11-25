@@ -39,6 +39,16 @@ class Settings:
     RAG_DEFAULT_TOP_K: int = int(os.getenv("RAG_DEFAULT_TOP_K", "5"))
     RAG_MAX_TOP_K: int = int(os.getenv("RAG_MAX_TOP_K", "20"))
 
+    # Chat orchestration settings
+    CHAT_REQUEST_STREAM_KEY: str = os.getenv("CHAT_REQUEST_STREAM_KEY", "chat:requests")
+    CHAT_REQUEST_CONSUMER_GROUP: str = os.getenv(
+        "CHAT_REQUEST_CONSUMER_GROUP",
+        "chat-workers",
+    )
+    CHAT_RESULT_KEY_PREFIX: str = os.getenv("CHAT_RESULT_KEY_PREFIX", "chat:results:")
+    CHAT_RESULT_TTL_SECONDS: int = int(os.getenv("CHAT_RESULT_TTL_SECONDS", "900"))
+    CHAT_DEFAULT_TOP_K: int = int(os.getenv("CHAT_DEFAULT_TOP_K", "5"))
+
     # Qdrant settings
     QDRANT_URL: str = os.getenv("QDRANT_URL", "http://localhost:6333")
     QDRANT_COLLECTION: str = os.getenv(

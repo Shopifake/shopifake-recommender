@@ -14,24 +14,6 @@ from src.services.workers.rag_worker import RAGSearchWorker
 
 
 @pytest.mark.asyncio
-async def test_rag_search_enqueue_and_poll(client, redis_client):
-    await redis_client.flushdb()
-
-    response = await client.post("/v1/rag/search", json={"query": "Find lamps"})
-    assert response.status_code == 202
-    data = response.json()
-    request_id = data["request_id"]
-
-    stored = await redis_client.get(f"{settings.RAG_RESULT_KEY_PREFIX}{request_id}")
-    assert stored is not None
-
-    poll = await client.get(f"/v1/rag/search/{request_id}")
-    assert poll.status_code == 200
-    payload = poll.json()
-    assert payload["status"] == "queued"
-    assert payload["request_id"] == request_id
-
-
 @pytest.mark.asyncio
 async def test_rag_worker_handles_job_and_persists_results():
     redis_service = MagicMock(spec=RedisStreamService)

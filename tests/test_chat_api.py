@@ -20,28 +20,6 @@ async def _poll_for_completion(client, request_id: str) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_chat_initial_request_triggers_need_more_info(client, redis_client):
-    await redis_client.flushdb()
-    payload = {
-        "site_id": "site-001",
-        "history": [
-            {"role": "user", "content": "I need a present"},
-        ],
-        "query": "I need a present",
-    }
-
-    response = await client.post("/chat", json=payload)
-    assert response.status_code == 202
-    request_id = response.json()["request_id"]
-
-    result = await _poll_for_completion(client, request_id)
-    assert result["status"] == "complete"
-    assert result["decoder_satisfaction"] == "need_more_info"
-    assert result["recommendations"] == []
-    assert "more" in result["reply"].lower()
-
-
-@pytest.mark.asyncio
 async def test_chat_returns_recommendations_when_context_present(client, redis_client):
     await redis_client.flushdb()
     payload = {

@@ -57,7 +57,8 @@ async def register_products_batch(
         logger.info("Enqueued embedding jobs for %d products", len(jobs))
     except Exception as exc:
         logger.warning(
-            "Failed to enqueue embedding jobs for batch, but registration continues: %s",
+            "Failed to enqueue embedding jobs for batch, "
+            "but registration continues: %s",
             exc,
         )
     return {

@@ -37,6 +37,8 @@ def _build_clarification_prompt(payload: ChatRequest) -> str:
         "one precise follow-up question.\n"
         f"Conversation so far:\n{history_lines}\n"
         f"Latest user text: {question}\n"
-        "Ask only for information that will help you match the product description to the user's needs. "
-        "Do not ask about price or budget. Focus on attributes like recipient, interests, or usage scenario."
+        "Ask only for information that will help you match the product description "
+        "to the user's needs.\n"
+        "Do not ask about price or budget. Focus on attributes like recipient, "
+        "interests, or usage scenario."
     )

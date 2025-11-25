@@ -15,9 +15,9 @@ async def generate_reply(
     decoder: DecoderClient | None,
     payload: ChatRequest,
     recommendations: list[ChatRecommendation],
-) -> str:
+) -> tuple[str, list[dict[str, object]]]:
     if decoder is None:
-        return default_reply(payload.query, recommendations)
+        return default_reply(payload.query, recommendations), recommendations
     prompt = build_decoder_prompt(payload, recommendations)
     try:
         response = await decoder.decode(prompt)
@@ -66,11 +66,12 @@ def build_decoder_prompt(
     history_lines = "\n".join(format_history_entry(entry) for entry in payload.history)
     return (
         "You are a shopping assistant. "
-        "Based on the conversation and the suggested products below, select the best product(s) for the user. "
+        "Based on the conversation and the suggested products below, "
+        "select the best product(s) for the user.\n"
         "Your response MUST be a JSON object with two fields: "
-        "'reply' (a short natural-language answer) and "
-        "'recommendations' (an array of product objects, each with 'product_id' and 'name',\n"
-        "chosen from the suggested products list). "
+        "'reply' (a short natural-language answer) and\n"
+        "'recommendations' (an array of product objects, each with "
+        "'product_id' and 'name', chosen from the suggested products list).\n"
         "Do not invent or suggest products that are not in the list.\n"
         f"Conversation so far:\n{history_lines}\n"
         f"Latest question: {payload.query}\n"

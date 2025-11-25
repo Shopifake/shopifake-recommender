@@ -1,0 +1,86 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: shopifake-qdrant-pvc
+  namespace: shopifake-staging
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shopifake-qdrant
+  namespace: shopifake-staging
+  labels:
+    app: shopifake-qdrant
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: shopifake-qdrant
+  template:
+    metadata:
+      labels:
+        app: shopifake-qdrant
+    spec:
+      containers:
+      - name: qdrant
+        image: qdrant/qdrant:v1.7.4
+        ports:
+        - containerPort: 6333
+          name: http
+        - containerPort: 6334
+          name: grpc
+        volumeMounts:
+        - name: qdrant-storage
+          mountPath: /qdrant/storage
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 2Gi
+          requests:
+            cpu: 250m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 6333
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 6333
+          initialDelaySeconds: 10
+          periodSeconds: 5
+      volumes:
+      - name: qdrant-storage
+        persistentVolumeClaim:
+          claimName: shopifake-qdrant-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shopifake-qdrant
+  namespace: shopifake-staging
+  labels:
+    app: shopifake-qdrant
+spec:
+  type: ClusterIP
+  ports:
+  - port: 6333
+    targetPort: 6333
+    protocol: TCP
+    name: http
+  - port: 6334
+    targetPort: 6334
+    protocol: TCP
+    name: grpc
+  selector:
+    app: shopifake-qdrant
+

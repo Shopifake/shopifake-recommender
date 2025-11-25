@@ -22,10 +22,30 @@ async def generate_reply(
     try:
         response = await decoder.decode(prompt)
         if response:
-            return response.strip()
+            import json
+
+            try:
+                data = json.loads(response)
+                reply = data.get("reply")
+                recs = data.get("recommendations")
+                # Validate recommendations format
+                if (
+                    isinstance(reply, str)
+                    and isinstance(recs, list)
+                    and all(
+                        isinstance(r, dict) and "product_id" in r and "name" in r
+                        for r in recs
+                    )
+                ):
+                    # Return reply and recommendations as expected
+                    return reply, recs
+            except Exception as json_exc:
+                logger.warning("Decoder did not return valid JSON: %s", json_exc)
+            # Fallback: treat as plain text
+            return response.strip(), recommendations
     except Exception as exc:  # pylint: disable=broad-exception-caught
         logger.warning("Decoder error, falling back to template: %s", exc)
-    return default_reply(payload.query, recommendations)
+    return default_reply(payload.query, recommendations), recommendations
 
 
 def default_reply(query: str, recommendations: list[ChatRecommendation]) -> str:
@@ -45,10 +65,15 @@ def build_decoder_prompt(
     )
     history_lines = "\n".join(format_history_entry(entry) for entry in payload.history)
     return (
-        "You are a concise shopping assistant. Use the customer's context and "
-        "the product list to craft a short helpful reply.\n"
+        "You are a shopping assistant. "
+        "Based on the conversation and the suggested products below, select the best product(s) for the user. "
+        "Your response MUST be a JSON object with two fields: "
+        "'reply' (a short natural-language answer) and "
+        "'recommendations' (an array of product objects, each with 'product_id' and 'name',\n"
+        "chosen from the suggested products list). "
+        "Do not invent or suggest products that are not in the list.\n"
         f"Conversation so far:\n{history_lines}\n"
         f"Latest question: {payload.query}\n"
         f"Suggested products:\n{product_lines}\n"
-        "Answer in under 60 words."
+        "Respond ONLY with valid JSON."
     )

@@ -84,7 +84,11 @@ class ChatOrchestrator:
         status = "satisfied" if recommendations else "unsatisfied"
         print(f"[ChatOrchestrator] Decoder satisfaction status: {status}")
         if status == "satisfied":
-            reply = await generate_reply(self._decoder, payload, recommendations)
+            reply_result = await generate_reply(self._decoder, payload, recommendations)
+            if isinstance(reply_result, tuple):
+                reply, recommendations = reply_result
+            else:
+                reply = reply_result
             print(f"[ChatOrchestrator] Reply generated: '{reply}'")
         else:
             reply = (

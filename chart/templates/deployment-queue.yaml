@@ -1,17 +1,17 @@
-{{- if and (not .Values.services.enabled) (not .Values.queue.enabled) }}
+{{- if .Values.queue.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "chart.fullname" . }}
+  name: {{ include "chart.fullname" . }}-queue
   labels:
     {{- include "chart.labels" . | nindent 4 }}
+    app.kubernetes.io/component: queue
 spec:
-  {{- if not .Values.autoscaling.enabled }}
-  replicas: {{ .Values.replicaCount }}
-  {{- end }}
+  replicas: {{ .Values.queue.replicaCount }}
   selector:
     matchLabels:
       {{- include "chart.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: queue
   template:
     metadata:
       {{- with .Values.podAnnotations }}
@@ -20,6 +20,7 @@ spec:
       {{- end }}
       labels:
         {{- include "chart.labels" . | nindent 8 }}
+        app.kubernetes.io/component: queue
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -34,34 +35,47 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
-        - name: {{ .Chart.Name }}
+        - name: embeddings-worker
           {{- with .Values.securityContext }}
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          ports:
-            - name: http
-              containerPort: {{ .Values.service.port }}
-              protocol: TCP
-          {{- with .Values.livenessProbe }}
-          livenessProbe:
+          image: "{{ .Values.queue.image.repository }}:{{ .Values.queue.image.tag | default .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.queue.image.pullPolicy | default .Values.image.pullPolicy }}
+          command: ["python", "-m", "src.services.workers.embedding_worker"]
+          {{- with .Values.queue.env }}
+          env:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.readinessProbe }}
-          readinessProbe:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-          {{- with .Values.resources }}
+          {{- with .Values.queue.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.volumeMounts }}
+          {{- with .Values.queue.volumeMounts }}
           volumeMounts:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-      {{- with .Values.volumes }}
+        - name: rag-worker
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.queue.image.repository }}:{{ .Values.queue.image.tag | default .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.queue.image.pullPolicy | default .Values.image.pullPolicy }}
+          command: ["python", "-m", "src.services.workers.rag_worker"]
+          {{- with .Values.queue.env }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.queue.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.queue.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.queue.volumes }}
       volumes:
         {{- toYaml . | nindent 8 }}
       {{- end }}
@@ -78,3 +92,4 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
 {{- end }}
+

@@ -95,3 +95,5 @@ ui/
 .env.example.dev
 .env.example.dev
 scripts/
+
+./chart/values-local.yaml

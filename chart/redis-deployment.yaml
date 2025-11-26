@@ -1,0 +1,83 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: shopifake-redis-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shopifake-redis
+  namespace: default
+  labels:
+    app: shopifake-redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: shopifake-redis
+  template:
+    metadata:
+      labels:
+        app: shopifake-redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7.4
+        ports:
+        - containerPort: 6379
+          name: redis
+        command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+        volumeMounts:
+        - name: redis-storage
+          mountPath: /data
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 10
+          periodSeconds: 5
+      volumes:
+      - name: redis-storage
+        persistentVolumeClaim:
+          claimName: shopifake-redis-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shopifake-redis
+  namespace: default
+  labels:
+    app: shopifake-redis
+spec:
+  type: ClusterIP
+  ports:
+  - port: 6379
+    targetPort: 6379
+    protocol: TCP
+    name: redis
+  selector:
+    app: shopifake-redis
+

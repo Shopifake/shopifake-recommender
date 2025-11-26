@@ -60,6 +60,15 @@ async def search_recommendations_with_rag_query(
     if not text or encoder is None:
         print(
             "[ChatRAG] No text or encoder available, returning empty recommendations."
+            f"text: {text}, encoder: {encoder}"
+            f"top_k: {top_k}"
+            f"qdrant_service: {qdrant_service}"
+            f"payload: {payload}"
+            f"rag_query: {rag_query}"
+            f"encoder: {encoder}"
+            f"qdrant_service: {qdrant_service}"
+            f"payload: {payload}"
+            f"rag_query: {rag_query}"
         )
         return []
     vector = await _encode_text(encoder, text)

@@ -1,0 +1,108 @@
+# Values for local development on Docker Desktop Kubernetes
+# Usage: helm install shopifake-recommender ./chart -f values-local.yaml
+
+# Global image configuration
+image:
+  repository: shopifake-recommender
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+# Services deployment (recommender API)
+services:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: shopifake-recommender
+    pullPolicy: IfNotPresent
+    tag: "latest"
+  
+  service:
+    type: NodePort  # Use NodePort for local access
+    port: 8000
+    nodePort: 30080  # Access via localhost:30080
+  
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 60  # Longer delay for local dev
+    periodSeconds: 10
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 30  # Longer delay for local dev
+    periodSeconds: 5
+  
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+  
+  env:
+    - name: ENVIRONMENT
+      value: "development"
+    - name: QDRANT_URL
+      value: "http://shopifake-qdrant:6333"
+    - name: REDIS_URL
+      value: "redis://shopifake-redis:6379/0"
+    # OpenAI configuration (required for encoder/decoder in chat API)
+    - name: OPENAI_API_KEY
+      value: "cle"
+    - name: OPENAI_MODEL
+      value: "gpt-4o-mini"
+    - name: OPENAI_EMBEDDING_MODEL
+      value: "text-embedding-3-small"
+
+# Queue deployment (workers)
+queue:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: shopifake-recommender
+    pullPolicy: IfNotPresent
+    tag: "latest"
+  
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+  
+  env:
+    - name: ENVIRONMENT
+      value: "development"
+    - name: QDRANT_URL
+      value: "http://shopifake-qdrant:6333"
+    - name: REDIS_URL
+      value: "redis://shopifake-redis:6379/0"
+    # OpenAI configuration (required for workers)
+    # For local development, you can set these directly or use a secret
+    - name: OPENAI_API_KEY
+      value: "cle"
+    - name: OPENAI_MODEL
+      value: "gpt-4o-mini"
+    - name: OPENAI_EMBEDDING_MODEL
+      value: "text-embedding-3-small"
+    - name: EMBEDDINGS_STREAM_KEY
+      value: "embeddings:jobs"
+    - name: EMBEDDINGS_CONSUMER_GROUP
+      value: "embeddings-workers"
+    - name: RAG_QUERY_STREAM_KEY
+      value: "rag:queries"
+    - name: RAG_QUERY_CONSUMER_GROUP
+      value: "rag-workers"
+    - name: DLQ_STREAM_KEY
+      value: "embeddings:dlq"
+    - name: BATCH_MAX_MESSAGES
+      value: "32"
+    - name: BATCH_MAX_WAIT_MS
+      value: "200"
+    - name: WORKER_CONCURRENCY
+      value: "4"
+

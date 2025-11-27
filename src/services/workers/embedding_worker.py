@@ -162,6 +162,14 @@ class EmbeddingWorker(BaseWorker):
             "shop_id": job.shop_id,
             "version": job.version,
             "trace_id": job.trace_id,
+            "name": (
+                job.metadata.get("name") if isinstance(job.metadata, dict) else None
+            ),
+            "description": (
+                job.metadata.get("description")
+                if isinstance(job.metadata, dict)
+                else None
+            ),
             "metadata": job.metadata,
         }
         return {k: v for k, v in payload.items() if v is not None}

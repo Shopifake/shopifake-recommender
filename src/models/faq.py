@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class FaqUserMessage(BaseModel):
@@ -39,6 +39,18 @@ class FaqRequest(BaseModel):
         default_factory=list,
         description="Previous messages in the conversation for context",
     )
+
+    @field_validator("message")
+    @classmethod
+    def message_must_not_be_whitespace_only(cls, value: str) -> str:
+        """Validate that the message contains non-whitespace characters."""
+        stripped_value = value.strip()
+        message_is_empty_after_strip = len(stripped_value) == 0
+
+        if message_is_empty_after_strip:
+            raise ValueError("Message cannot be empty or contain only whitespace")
+
+        return value
 
 
 class FaqResponse(BaseModel):

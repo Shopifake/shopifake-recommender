@@ -27,6 +27,8 @@ include = '\.pyi?$'
 [tool.ruff]
 line-length = 88
 target-version = "py312"
+
+[tool.ruff.lint]
 select = [
     "E",   # pycodestyle errors
     "W",   # pycodestyle warnings
@@ -38,6 +40,10 @@ select = [
 ]
 ignore = []
 
-[tool.ruff.isort]
+[tool.ruff.lint.per-file-ignores]
+"src/api/routes/faq.py" = ["E501"]
+"tests/test_faq.py" = ["E501"]
+
+[tool.ruff.lint.isort]
 known-first-party = ["src"]
 

@@ -18,7 +18,9 @@ class FaqAssistantMessage(BaseModel):
     """A message sent by the FAQ assistant."""
 
     role: Literal["assistant"] = "assistant"
-    content: str = Field(..., min_length=1, description="The assistant's response content")
+    content: str = Field(
+        ..., min_length=1, description="The assistant's response content"
+    )
 
 
 FaqHistoryEntry = FaqUserMessage | FaqAssistantMessage
@@ -43,4 +45,3 @@ class FaqResponse(BaseModel):
     """Response payload from the FAQ answer endpoint."""
 
     answer: str = Field(..., description="The chatbot's answer to the user's question")
-

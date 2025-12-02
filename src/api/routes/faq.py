@@ -14,7 +14,9 @@ from src.services.clients.decoder_client import DecoderDependency
 router = APIRouter(prefix="/faq", tags=["faq"])
 logger = logging.getLogger(__name__)
 
-FAQ_CONTENT_FILE_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "faq_content.txt"
+FAQ_CONTENT_FILE_PATH = (
+    Path(__file__).resolve().parent.parent.parent / "data" / "faq_content.txt"
+)
 
 
 def _load_faq_content() -> str:
@@ -69,7 +71,7 @@ FAQ CONTENT:
 {faq_content}
 
 Remember: Only use information from the FAQ above to answer questions."""
-    
+
     formatted_system_prompt = system_prompt_template.format(faq_content=faq_content)
     return formatted_system_prompt
 
@@ -96,11 +98,13 @@ def _format_conversation_history(request: FaqRequest) -> str:
     conversation_lines = "\n".join(formatted_entries)
     header = "PREVIOUS CONVERSATION:\n"
     trailing_newlines = "\n\n"
-    
+
     return header + conversation_lines + trailing_newlines
 
 
-def _build_full_prompt(system_prompt: str, conversation_context: str, user_message: str) -> str:
+def _build_full_prompt(
+    system_prompt: str, conversation_context: str, user_message: str
+) -> str:
     """Assemble the complete prompt for the decoder.
 
     Args:
@@ -167,7 +171,9 @@ async def answer_faq_question(
 
     system_prompt = _build_system_prompt(faq_content)
     conversation_context = _format_conversation_history(payload)
-    full_prompt = _build_full_prompt(system_prompt, conversation_context, payload.message)
+    full_prompt = _build_full_prompt(
+        system_prompt, conversation_context, payload.message
+    )
 
     logger.info(
         "Processing FAQ question",
@@ -188,4 +194,3 @@ async def answer_faq_question(
     )
 
     return FaqResponse(answer=answer)
-

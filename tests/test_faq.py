@@ -36,7 +36,10 @@ async def test_faq_answer_returns_response_with_conversation_history(client):
         "message": "And how do I add products?",
         "conversation_history": [
             {"role": "user", "content": "How do I create my store?"},
-            {"role": "assistant", "content": "To create your store, follow these steps..."},
+            {
+                "role": "assistant",
+                "content": "To create your store, follow these steps...",
+            },
         ],
     }
 
@@ -181,4 +184,3 @@ async def test_faq_answer_accepts_assistant_role_in_history(client):
 
     # Assert
     assert response.status_code == 200
-

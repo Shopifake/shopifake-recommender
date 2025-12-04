@@ -1,53 +1,44 @@
-# This file contains frequently asked questions and their answers.
-#
-# Format:
-# Q: [Question]
-# A: [Answer]
+# Shopifake FAQ - Store Owner Assistant
+# This chatbot helps store owners manage their online shops
 
-# GETTING STARTED
+# === GETTING STARTED ===
 
-Q: How do I create my store?
-A: Demande à Eugénio
+Q: How do I create my first store?
+A: Click "Create New Site" from My Sites. Fill in your site name, description, currency, and language. Customize your storefront with banner images, logo, colors, title, and subtitle. Your store will be at http://[your-slug].shopifake.com
 
-Q: How do I configure my store settings?
-A: [To be filled - Explain store configuration options]
+Q: What are the subscription plans?
+A: Home Essentials (Starter - $19.99/month): up to 100 products, basic analytics. Fashion Boutique (Business - $49.99/month): up to 500 products, basic analytics, email support, custom domain. Tech Store Pro (Premium - $99.99/month): unlimited products, advanced analytics, priority support, custom domain.
 
-Q: What payment methods are supported?
-A: [To be filled - List supported payment methods]
+Q: Can I preview my site?
+A: Yes! Use the "Preview site" button when creating or editing your site to see how it will look to customers.
 
-# PRODUCTS
-=
-Q: How do I add a product to my store?
-A: [To be filled - Explain product creation process]
+Q: How do I customize my storefront?
+A: In Storefront Identity, set: banner images (portrait/landscape), logo URL, primary/secondary colors, site title/subtitle, and hero description. In About section: store history, 4 value statements, and contact information.
 
-Q: How do I edit an existing product?
-A: [To be filled - Explain product editing]
+# === SITE MANAGEMENT ===
 
-Q: How do I delete a product?
-A: [To be filled - Explain product deletion]
+Q: How do I edit my site?
+A: Go to My Sites, click on your site to edit name, description, branding, and contact details.
 
-Q: How do I manage product inventory?
-A: [To be filled - Explain inventory management]
+Q: Can I have multiple stores?
+A: Yes! Manage multiple stores from My Sites. Each has its own branding and config.
 
-# ORDERS
+Q: How do I change my site URL?
+A: Your site slug determines your URL (e.g., analog-atlas.shopifake.com). Edit it in site settings, but note it may break existing links.
 
-Q: How do I view my orders?
-A: [To be filled - Explain order viewing]
+# === DASHBOARD ===
 
-Q: How do I process a refund?
-A: [To be filled - Explain refund process]
+Q: What metrics can I see?
+A: Last 7 days: Total Revenue (with % change), Conversion Rate, Total Orders, Low Stock Items. Plus Revenue Trend graph and Sales by Category breakdown.
 
-Q: How do I track shipments?
-A: [To be filled - Explain shipment tracking]
+Q: What does Low Stock Items mean?
+A: Number of products running low on inventory. Restock them to avoid selling out.
 
-# ACCOUNT
+# === SUPPORT ===
 
-Q: How do I reset my password?
-A: [To be filled - Explain password reset]
+Q: I need help with something not covered here
+A: Contact our Shopifake support team! If they solve your problem, feel free to give them a 20/20 rating - they really appreciate it!
 
-Q: How do I update my account information?
-A: [To be filled - Explain account updates]
-
-Q: How do I contact support?
-A: [To be filled - Provide support contact information]
+Q: My site isn't loading correctly
+A: Try refreshing the preview. Check all required fields are filled (name, slug, currency, language). If issues persist, contact support.
 
